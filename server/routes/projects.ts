@@ -169,43 +169,39 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// Preset projects for auto-detection
-const PRESET_PROJECTS = [
-  { name: 'Qoder', path: '~/.qoder/skills' },
-  { name: 'Cursor', path: '~/.cursor/skills-cursor' },
-  { name: 'Copilot', path: '~/.copilot/skills' },
-  { name: 'Codex', path: '~/.codex/skills' },
-  { name: 'Claude', path: '~/.claude/skills' },
-  { name: 'OpenClaw', path: '~/.openclaw/skills' },
-  { name: 'QoderWork', path: '~/.qoderwork/skills' },
-];
-
-// POST /api/projects/auto-detect - Auto-detect preset projects
+// POST /api/projects/auto-detect - Auto-detect projects based on configured tools
+// Dynamically scans ~/.<configDir>/<skillsDir> for each tool in config
 router.post('/auto-detect', async (_req: Request, res: Response) => {
   try {
     const config = await getConfig();
     const dismissedPaths: string[] = (config as any).dismissedPaths || [];
     const added: any[] = [];
 
-    for (const preset of PRESET_PROJECTS) {
-      const expandedPath = expandHome(preset.path);
+    // Build scan list from configured tools (both built-in and custom)
+    const toolScanList = (config.tools || [])
+      .filter(t => t.enabled !== false)
+      .map(t => ({
+        name: t.name,
+        path: path.join(os.homedir(), t.configDir, t.skillsDir),
+      }));
 
+    for (const preset of toolScanList) {
       // Skip if already in project list
-      if (config.projects.some(p => p.path === expandedPath)) {
+      if (config.projects.some(p => p.path === preset.path)) {
         continue;
       }
 
       // Skip if user previously dismissed this path
-      if (dismissedPaths.includes(expandedPath)) {
+      if (dismissedPaths.includes(preset.path)) {
         continue;
       }
 
       // Only add if directory actually exists on disk
-      if (await fs.pathExists(expandedPath)) {
+      if (await fs.pathExists(preset.path)) {
         const newProject = {
           id: uuidv4(),
           name: preset.name,
-          path: expandedPath,
+          path: preset.path,
           createdAt: new Date().toISOString(),
           tools: [] as any[],
         };

@@ -32,9 +32,9 @@ export default function ProjectsPage() {
 
   const autoDetectRan = useRef(false)
 
-  // Auto-detect preset projects on first load
+  // Auto-detect preset projects on first load (after initial fetch completes)
   useEffect(() => {
-    if (autoDetectRan.current) return
+    if (autoDetectRan.current || loading) return
     autoDetectRan.current = true
 
     autoDetect().then((result) => {
@@ -42,7 +42,7 @@ export default function ProjectsPage() {
         toast.success(`自动检测到 ${result.added.length} 个项目：${result.added.map((p: any) => p.name).join('、')}`)
       }
     })
-  }, [autoDetect])
+  }, [autoDetect, loading])
 
   const [showAddModal, setShowAddModal] = useState(false)
   const [linkStatusMap, setLinkStatusMap] = useState<Record<string, ProjectLinkInfo>>({})
