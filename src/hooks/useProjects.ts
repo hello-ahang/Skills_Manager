@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { useProjectStore } from '@/stores/projectStore'
-import { useConfigStore } from '@/stores/configStore'
 
 export function useProjects() {
   const {
@@ -17,12 +16,9 @@ export function useProjects() {
     filteredProjects,
   } = useProjectStore()
 
-  const { fetchConfig } = useConfigStore()
-
   useEffect(() => {
-    fetchConfig()
     fetchProjects()
-  }, [fetchConfig, fetchProjects])
+  }, [fetchProjects])
 
   return {
     projects: filteredProjects(),

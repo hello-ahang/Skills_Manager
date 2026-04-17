@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from '@/components/ui/sonner'
+import { useConfigStore } from '@/stores/configStore'
 import Sidebar from '@/components/layout/Sidebar'
 import Header from '@/components/layout/Header'
 import ProjectsPage from '@/pages/ProjectsPage'
@@ -7,8 +9,12 @@ import SkillsPage from '@/pages/SkillsPage'
 // ToolsPage removed
 import HelpPage from '@/pages/HelpPage'
 import AnalyticsPage from '@/pages/AnalyticsPage'
+import HomePage from '@/pages/HomePage'
 
 function App() {
+  const fetchConfig = useConfigStore(s => s.fetchConfig)
+  useEffect(() => { fetchConfig() }, [fetchConfig])
+
   return (
     <BrowserRouter>
       <div className="flex h-screen flex-col bg-background">
@@ -18,7 +24,8 @@ function App() {
           <Header />
           <main className="flex-1 overflow-auto p-6">
             <Routes>
-              <Route path="/" element={<Navigate to="/projects" replace />} />
+              <Route path="/" element={<Navigate to="/home" replace />} />
+              <Route path="/home" element={<HomePage />} />
               <Route path="/projects" element={<ProjectsPage />} />
               <Route path="/skills" element={<SkillsPage />} />
               <Route path="/links" element={<Navigate to="/projects" replace />} />

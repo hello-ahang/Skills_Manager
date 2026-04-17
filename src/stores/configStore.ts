@@ -11,6 +11,7 @@ interface ConfigState {
   preferences: AppPreferences
   loading: boolean
   error: string | null
+  configLoaded: boolean
 
   fetchConfig: () => Promise<void>
   updateConfig: (updates: {
@@ -40,8 +41,11 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
   },
   loading: false,
   error: null,
+  configLoaded: false,
 
   fetchConfig: async () => {
+    // Only load once to prevent overwriting local optimistic updates
+    if (get().configLoaded) return
     set({ loading: true, error: null })
     try {
       const config = await configApi.get()
@@ -54,6 +58,7 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
         tools: config.tools,
         preferences: prefs,
         loading: false,
+        configLoaded: true,
       })
       // Apply theme and UI style
       applyTheme(prefs.theme || 'system')

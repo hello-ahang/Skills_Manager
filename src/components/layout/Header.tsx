@@ -34,13 +34,12 @@ const pageTitles: Record<string, string> = {
 export default function Header() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { preferences, llmModels, setTheme, setUIStyle, updateConfig } = useConfigStore()
+  const { preferences, llmModels, setTheme, setUIStyle } = useConfigStore()
   const title = pageTitles[location.pathname] || 'Skills Manager'
   const isPixel = preferences.uiStyle === 'pixel'
 
-  const [showModelManage, setShowModelManage] = useState(false)
-  const [showAddModel, setShowAddModel] = useState(false)
-  const [showEditModel, setShowEditModel] = useState(false)
+  const [showModelDialog, setShowModelDialog] = useState(false)
+  const [modelView, setModelView] = useState<'list' | 'add' | 'edit'>('list')
   const [editingModel, setEditingModel] = useState<LLMModel | null>(null)
   const [testingId, setTestingId] = useState<string | null>(null)
 
@@ -75,13 +74,19 @@ export default function Header() {
       displayName: formDisplayName.trim(),
       tested: false,
     }
+    const newModels = [...llmModels, newModel]
+    // Optimistic update: immediately update local store, then persist to backend
+    useConfigStore.setState({ llmModels: newModels })
+    resetForm()
+    setModelView('list')
+    toast.success('模型已添加')
     try {
-      await updateConfig({ llmModels: [...llmModels, newModel] })
-      toast.success('模型已添加')
-      setShowAddModel(false)
-      resetForm()
+      await configApi.update({ llmModels: newModels })
     } catch {
-      setFormError('添加失败')
+      // Rollback on failure
+      useConfigStore.setState({ llmModels })
+      toast.error('保存失败，已回滚')
+      setModelView('add')
     }
   }
 
@@ -100,28 +105,36 @@ export default function Header() {
             apiKey: formApiKey.trim(),
             modelName: formModelName.trim(),
             displayName: formDisplayName.trim(),
-            tested: false, // Reset test status after edit
+            tested: false,
           }
         : m
     )
+    const oldModels = llmModels
+    // Optimistic update
+    useConfigStore.setState({ llmModels: updated })
+    setEditingModel(null)
+    resetForm()
+    setModelView('list')
+    toast.success('模型已更新')
     try {
-      await updateConfig({ llmModels: updated })
-      toast.success('模型已更新')
-      setShowEditModel(false)
-      setEditingModel(null)
-      resetForm()
+      await configApi.update({ llmModels: updated })
     } catch {
-      setFormError('更新失败')
+      useConfigStore.setState({ llmModels: oldModels })
+      toast.error('保存失败，已回滚')
     }
   }
 
   const handleDeleteModel = async (id: string) => {
     const updated = llmModels.filter(m => m.id !== id)
+    const oldModels = llmModels
+    // Optimistic update
+    useConfigStore.setState({ llmModels: updated })
+    toast.success('模型已删除')
     try {
-      await updateConfig({ llmModels: updated })
-      toast.success('模型已删除')
+      await configApi.update({ llmModels: updated })
     } catch {
-      toast.error('删除失败')
+      useConfigStore.setState({ llmModels: oldModels })
+      toast.error('删除失败，已回滚')
     }
   }
 
@@ -134,11 +147,11 @@ export default function Header() {
         modelName: model.modelName,
       })
       if (result.success) {
-        // Update model as tested
         const updated = llmModels.map(m =>
           m.id === model.id ? { ...m, tested: true, testedAt: new Date().toISOString() } : m
         )
-        await updateConfig({ llmModels: updated })
+        useConfigStore.setState({ llmModels: updated })
+        configApi.update({ llmModels: updated }).catch(() => {})
         toast.success(`连接成功！模型回复: ${result.reply}`)
       } else {
         toast.error(`连接失败: ${result.error}`)
@@ -150,7 +163,7 @@ export default function Header() {
     }
   }
 
-  const openEditDialog = (model: LLMModel) => {
+  const openEditView = (model: LLMModel) => {
     setEditingModel(model)
     setFormProvider(model.provider)
     setFormBaseUrl(model.baseUrl)
@@ -158,11 +171,10 @@ export default function Header() {
     setFormModelName(model.modelName)
     setFormDisplayName(model.displayName)
     setFormError('')
-    setShowModelManage(false)
-    setShowEditModel(true)
+    setModelView('edit')
   }
 
-  const ModelFormFields = () => (
+  const modelFormFields = (
     <div className="space-y-3 py-4">
       <div className="space-y-1.5">
         <Label htmlFor="provider" className="text-xs">模型提供商</Label>
@@ -259,7 +271,7 @@ export default function Header() {
             variant="outline"
             size="sm"
             className="h-8 text-xs gap-1.5"
-            onClick={() => setShowModelManage(true)}
+            onClick={() => { setModelView('list'); setShowModelDialog(true); }}
           >
             <Bot className="h-3.5 w-3.5" />
             模型配置
@@ -283,123 +295,121 @@ export default function Header() {
         </div>
       </header>
 
-      {/* Model Management Dialog */}
-      <Dialog open={showModelManage} onOpenChange={setShowModelManage}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Bot className="h-5 w-5" />
-              模型配置
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-4">
-            <p className="text-xs text-muted-foreground">
-              配置 LLM 模型用于 AI 生成技能，支持 OpenAI 兼容接口。
-            </p>
-            {llmModels.length === 0 ? (
-              <div className="rounded-md border border-dashed p-6 text-center">
-                <p className="text-sm text-muted-foreground">暂无模型配置，请添加</p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {llmModels.map(model => (
-                  <div key={model.id} className="flex items-center gap-2 rounded-md border p-2.5">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-medium truncate">{model.displayName}</span>
-                        {model.tested ? (
-                          <Badge variant="default" className="text-[10px] px-1.5 py-0 gap-0.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
-                            <CheckCircle2 className="h-2.5 w-2.5" />
-                            已验证
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                            未验证
-                          </Badge>
-                        )}
-                      </div>
-                      <code className="text-[10px] text-muted-foreground truncate block">
-                        {model.provider} / {model.modelName}
-                      </code>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      title="测试连接"
-                      disabled={testingId === model.id}
-                      onClick={() => handleTestModel(model)}
-                    >
-                      {testingId === model.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Zap className="h-3.5 w-3.5" />
-                      )}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      title="编辑"
-                      onClick={() => openEditDialog(model)}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
-                      title="删除"
-                      onClick={() => handleDeleteModel(model.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+      {/* Model Config Dialog - Single dialog with view switching */}
+      <Dialog open={showModelDialog} onOpenChange={(open) => { setShowModelDialog(open); if (!open) { resetForm(); setEditingModel(null); setModelView('list'); } }}>
+        <DialogContent className="sm:max-w-lg" onPointerDownOutside={(e) => { if (modelView !== 'list') e.preventDefault(); }}>
+          {modelView === 'list' && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Bot className="h-5 w-5" />
+                  模型配置
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 py-4">
+                <p className="text-xs text-muted-foreground">
+                  配置 LLM 模型用于 AI 生成技能，支持 OpenAI 兼容接口。
+                </p>
+                {llmModels.length === 0 ? (
+                  <div className="rounded-md border border-dashed p-6 text-center">
+                    <p className="text-sm text-muted-foreground">暂无模型配置，请添加</p>
                   </div>
-                ))}
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {llmModels.map(model => (
+                      <div key={model.id} className="flex items-center gap-2 rounded-md border p-2.5">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-medium truncate">{model.displayName}</span>
+                            {model.tested ? (
+                              <Badge variant="default" className="text-[10px] px-1.5 py-0 gap-0.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                                <CheckCircle2 className="h-2.5 w-2.5" />
+                                已验证
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                未验证
+                              </Badge>
+                            )}
+                          </div>
+                          <code className="text-[10px] text-muted-foreground truncate block">
+                            {model.provider} / {model.modelName}
+                          </code>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          title="测试连接"
+                          disabled={testingId === model.id}
+                          onClick={() => handleTestModel(model)}
+                        >
+                          {testingId === model.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Zap className="h-3.5 w-3.5" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          title="编辑"
+                          onClick={() => openEditView(model)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
+                          title="删除"
+                          onClick={() => handleDeleteModel(model.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                resetForm()
-                setShowModelManage(false)
-                setShowAddModel(true)
-              }}
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              添加模型
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => { resetForm(); setModelView('add'); }}
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  添加模型
+                </Button>
+              </DialogFooter>
+            </>
+          )}
 
-      {/* Add Model Dialog */}
-      <Dialog open={showAddModel} onOpenChange={(open) => { setShowAddModel(open); if (!open) setShowModelManage(true); }}>
-        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle>添加模型</DialogTitle>
-          </DialogHeader>
-          <ModelFormFields />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowAddModel(false); setShowModelManage(true); }}>取消</Button>
-            <Button onClick={handleAddModel}>添加</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          {modelView === 'add' && (
+            <>
+              <DialogHeader>
+                <DialogTitle>添加模型</DialogTitle>
+              </DialogHeader>
+              {modelFormFields}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { resetForm(); setModelView('list'); }}>返回</Button>
+                <Button onClick={handleAddModel}>添加</Button>
+              </DialogFooter>
+            </>
+          )}
 
-      {/* Edit Model Dialog */}
-      <Dialog open={showEditModel} onOpenChange={(open) => { setShowEditModel(open); if (!open) setShowModelManage(true); }}>
-        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle>编辑模型</DialogTitle>
-          </DialogHeader>
-          <ModelFormFields />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowEditModel(false); setShowModelManage(true); }}>取消</Button>
-            <Button onClick={handleEditModel}>保存</Button>
-          </DialogFooter>
+          {modelView === 'edit' && (
+            <>
+              <DialogHeader>
+                <DialogTitle>编辑模型</DialogTitle>
+              </DialogHeader>
+              {modelFormFields}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { resetForm(); setEditingModel(null); setModelView('list'); }}>返回</Button>
+                <Button onClick={handleEditModel}>保存</Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </>

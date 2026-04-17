@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { useSkillsStore } from '@/stores/skillsStore'
-import { useConfigStore } from '@/stores/configStore'
 
 export function useSkills() {
   const {
@@ -33,13 +32,10 @@ export function useSkills() {
     clearSelection,
   } = useSkillsStore()
 
-  const { fetchConfig } = useConfigStore()
-
   useEffect(() => {
-    fetchConfig()
     fetchTree()
     fetchTemplates()
-  }, [fetchConfig, fetchTree, fetchTemplates])
+  }, [fetchTree, fetchTemplates])
 
   return {
     tree,

@@ -154,42 +154,6 @@ export default function ProjectsPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
-      {/* Product Guide */}
-      <div className="rounded-lg border bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 p-4 space-y-3">
-        <div className="grid grid-cols-3 gap-4 text-sm">
-          <div>
-            <div className="font-medium text-red-600 dark:text-red-400 mb-1">😩 痛点</div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              多个 AI 编程工具各自维护 Skills，内容分散、难以同步，重复劳动多。
-            </p>
-          </div>
-          <div>
-            <div className="font-medium text-green-600 dark:text-green-400 mb-1">💡 解法</div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              统一源目录管理 Skills，通过软链接一键同步到各项目，一处维护、多处生效。
-            </p>
-          </div>
-          <div>
-            <div className="font-medium text-blue-600 dark:text-blue-400 mb-1">🚀 步骤</div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              ① Skills 库添加源目录 → ② 添加项目 → ③ 绑定源目录 → ④ 绑定/解除后重启项目程序。
-            </p>
-          </div>
-        </div>
-        <div className="border-t border-blue-100 dark:border-blue-900 pt-2.5">
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground/70">更多亮点</span>
-            <span className="flex items-center gap-1">✏️ 在线编辑 Skills 内容，实时预览</span>
-            <span className="flex items-center gap-1">🤖 AI 智能生成 Skills，一键创建</span>
-            <span className="flex items-center gap-1">🔍 AI 智能检查/优化 Skills</span>
-          </div>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
-            <span className="font-medium text-orange-500 dark:text-orange-400">注意事项</span>
-            <span>⚠️ 由于悟空 Skills 必须经过审核，因此本产品不支持悟空。</span>
-          </div>
-        </div>
-      </div>
-
       <div className="flex items-center justify-between">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
