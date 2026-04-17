@@ -47,7 +47,11 @@ Skills 统一管理平台 — 为同时使用 Claude、Qoder、QoderWork、Openc
 ### 一键安装
 
 ```bash
-# 克隆项目后，执行一键安装脚本
+# 1. 克隆项目
+git clone git@gitlab.alibaba-inc.com:wyj234673/Skills_Manager.git
+cd Skills_Manager
+
+# 2. 执行一键安装脚本
 chmod +x install.sh && ./install.sh
 ```
 
