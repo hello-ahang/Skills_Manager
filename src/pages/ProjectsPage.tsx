@@ -229,6 +229,7 @@ export default function ProjectsPage() {
         open={showAddModal}
         onOpenChange={setShowAddModal}
         onAdd={handleAddProjects}
+        onRefresh={refreshProjects}
         existingPaths={projects.map((p) => p.path)}
       />
 

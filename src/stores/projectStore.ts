@@ -36,11 +36,17 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   addProject: async (path, name) => {
     set({ loading: true, error: null })
     try {
-      const project = await projectsApi.add({ path, name })
-      set((state) => ({
-        projects: [...state.projects, project],
-        loading: false,
-      }))
+      const result = await projectsApi.add({ path, name })
+      // Handle both formats: { added: [...] } (new) or direct project object (legacy)
+      const project = result.added ? result.added[0] : result
+      if (project) {
+        set((state) => ({
+          projects: [...state.projects, project],
+          loading: false,
+        }))
+      } else {
+        set({ loading: false })
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to add project'
       set({ loading: false, error: message })

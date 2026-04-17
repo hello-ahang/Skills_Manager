@@ -158,14 +158,29 @@ router.post('/', async (req: Request, res: Response) => {
 
     await saveConfig(config);
 
-    if (added.length === 1 && errors.length === 0) {
-      // Single add: return the project directly for backward compatibility
-      res.status(201).json(added[0]);
-    } else {
-      res.status(201).json({ added, errors });
-    }
+    // Always return consistent format with added array
+    res.status(201).json({ added, errors });
   } catch (error) {
     res.status(500).json({ error: 'Failed to add project' });
+  }
+});
+
+// POST /api/projects/check-paths - Check which paths exist on disk
+router.post('/check-paths', async (req: Request, res: Response) => {
+  try {
+    const { paths } = req.body;
+    if (!paths || !Array.isArray(paths)) {
+      res.status(400).json({ error: 'paths array is required' });
+      return;
+    }
+    const results: { path: string; exists: boolean }[] = [];
+    for (const p of paths) {
+      const expanded = expandHome(p);
+      results.push({ path: p, exists: await fs.pathExists(expanded) });
+    }
+    res.json({ results });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to check paths' });
   }
 });
 

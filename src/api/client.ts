@@ -57,6 +57,8 @@ export const projectsApi = {
     request<{ added: any[]; errors: { path: string; error: string }[] }>('/projects', { method: 'POST', body: { projects } }),
   autoDetect: () =>
     request<{ added: any[]; total: number }>('/projects/auto-detect', { method: 'POST' }),
+  checkPaths: (paths: string[]) =>
+    request<{ results: { path: string; exists: boolean }[] }>('/projects/check-paths', { method: 'POST', body: { paths } }),
   remove: (id: string) =>
     request<{ success: boolean }>(`/projects/${id}`, { method: 'DELETE' }),
   browse: (dirPath: string) =>

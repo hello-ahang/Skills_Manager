@@ -12,7 +12,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, ScanSearch } from 'lucide-react'
+import { projectsApi } from '@/api/client'
+import { toast } from 'sonner'
 
 const PRESET_PROJECTS = [
   { name: 'Qoder', defaultPath: '~/.qoder/skills' },
@@ -38,6 +40,7 @@ interface AddProjectModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onAdd: (items: { path: string; name?: string }[]) => Promise<void>
+  onRefresh?: () => void
   existingPaths?: string[]
 }
 
@@ -48,7 +51,7 @@ function normalizePath(p: string): string {
   return normalized
 }
 
-export default function AddProjectModal({ open, onOpenChange, onAdd, existingPaths = [] }: AddProjectModalProps) {
+export default function AddProjectModal({ open, onOpenChange, onAdd, onRefresh, existingPaths = [] }: AddProjectModalProps) {
   // Check if a preset path is already in the project list
   const isPresetAdded = (presetPath: string): boolean => {
     const normalized = normalizePath(presetPath)
@@ -148,7 +151,59 @@ export default function AddProjectModal({ open, onOpenChange, onAdd, existingPat
         <div className="space-y-4 py-2">
           {/* Preset Projects */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">预制项目</Label>
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">预制项目</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                disabled={loading}
+                onClick={async () => {
+                  setLoading(true)
+                  setError('')
+                  try {
+                    // 1. Collect all preset paths that are not already added
+                    const toCheck = presets
+                      .map((p, i) => ({ path: p.path.trim(), name: PRESET_PROJECTS[i].name, index: i }))
+                      .filter((item) => item.path && !isPresetAdded(item.path))
+
+                    if (toCheck.length === 0) {
+                      toast.info('所有预制项目已添加')
+                      setLoading(false)
+                      return
+                    }
+
+                    // 2. Check which paths exist on disk
+                    const checkResult = await projectsApi.checkPaths(toCheck.map((t) => t.path))
+                    const existingItems = toCheck.filter((item) => {
+                      const found = checkResult.results.find((r) => r.path === item.path)
+                      return found?.exists
+                    })
+
+                    if (existingItems.length === 0) {
+                      toast.info('未发现本地存在的预制项目目录')
+                      setLoading(false)
+                      return
+                    }
+
+                    // 3. Add existing preset projects
+                    await onAdd(existingItems.map((item) => ({ path: item.path, name: item.name })))
+                    toast.success(`已添加 ${existingItems.length} 个项目：${existingItems.map((p) => p.name).join('、')}`)
+                    setPresets(PRESET_PROJECTS.map((p) => ({ selected: false, path: p.defaultPath })))
+                    onOpenChange(false)
+                    onRefresh?.()
+                  } catch {
+                    toast.error('自动扫描添加失败')
+                  } finally {
+                    setLoading(false)
+                  }
+                }}
+              >
+                <ScanSearch className="mr-1 h-3 w-3" />
+                自动扫描添加
+              </Button>
+            </div>
             <div className="space-y-2">
               {PRESET_PROJECTS.map((preset, index) => {
                 const alreadyAdded = isPresetAdded(presets[index].path)
