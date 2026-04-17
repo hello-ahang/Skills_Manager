@@ -1,0 +1,59 @@
+{
+  "tools": [
+    {
+      "type": "claude",
+      "name": "Claude",
+      "configDir": ".claude",
+      "skillsDir": "skills",
+      "enabled": false
+    },
+    {
+      "type": "cursor",
+      "name": "Cursor",
+      "configDir": ".cursor",
+      "skillsDir": "skills-cursor",
+      "enabled": false
+    },
+    {
+      "type": "codebuddy",
+      "name": "CodeBuddy",
+      "configDir": ".codebuddy",
+      "skillsDir": "skills",
+      "enabled": false
+    },
+    {
+      "type": "copilot",
+      "name": "GitHub Copilot",
+      "configDir": ".github",
+      "skillsDir": "copilot/skills",
+      "enabled": false
+    },
+    {
+      "type": "qoder",
+      "name": "Qoder",
+      "configDir": ".qoder",
+      "skillsDir": "skills",
+      "enabled": false
+    },
+    {
+      "type": "codex",
+      "name": "Codex",
+      "configDir": ".codex",
+      "skillsDir": "skills",
+      "enabled": false
+    },
+    {
+      "type": "qoderwork",
+      "name": "QoderWork",
+      "configDir": ".qoderwork",
+      "skillsDir": "skills",
+      "enabled": false
+    }
+  ],
+  "preferences": {
+    "theme": "system",
+    "autoSync": false,
+    "backupBeforeReplace": true,
+    "uiStyle": "default"
+  }
+}
