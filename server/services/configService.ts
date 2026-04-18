@@ -141,6 +141,7 @@ async function migrateToUserConfig(): Promise<void> {
       llmModels: existingUserConfig.llmModels?.length > 0 ? existingUserConfig.llmModels : (projectData.llmModels || []),
       projects: existingUserConfig.projects?.length > 0 ? existingUserConfig.projects : (projectData.projects || []),
       dismissedPaths: existingUserConfig.dismissedPaths?.length > 0 ? existingUserConfig.dismissedPaths : (projectData.dismissedPaths || []),
+      gitTokens: existingUserConfig.gitTokens || { github: '', gitee: '', gitlab: '' },
     };
 
     // Save user config

@@ -1,10 +1,10 @@
 {
   "name": "ahang-skills-manager",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "多 AI 工具 Skills 统一管理平台 — 支持 Claude、Cursor、CodeBuddy、Copilot 等",
   "type": "module",
   "bin": {
-    "ahang-skills-manager": "./dist/server/server/cli.js"
+    "ahang-skills-manager": "dist/server/server/cli.js"
   },
   "files": [
     "dist/",
@@ -24,7 +24,16 @@
     "start": "node dist/server/server/index.js",
     "preview": "vite preview"
   },
-  "keywords": ["skills", "ai", "cursor", "claude", "copilot", "codebuddy", "manager", "prompt"],
+  "keywords": [
+    "skills",
+    "ai",
+    "cursor",
+    "claude",
+    "copilot",
+    "codebuddy",
+    "manager",
+    "prompt"
+  ],
   "author": "阿航",
   "license": "MIT",
   "repository": {
