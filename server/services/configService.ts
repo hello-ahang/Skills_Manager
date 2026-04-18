@@ -5,7 +5,9 @@ import { v4 as uuidv4 } from 'uuid';
 import type { AppConfig, ToolDefinition, AppPreferences, SourceDir, LLMModel } from '../../src/types/index.js';
 
 // Project-level config (safe to commit to git)
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+// SM_PKG_ROOT is set by cli.ts for npm global install; fallback to cwd for local dev
+const PKG_ROOT = process.env.SM_PKG_ROOT || process.cwd();
+const DATA_DIR = path.resolve(PKG_ROOT, 'data');
 const PROJECT_CONFIG_PATH = path.join(DATA_DIR, 'config.json');
 
 // User-level config (contains sensitive data like API keys, stored in home dir)
@@ -65,6 +67,7 @@ const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   ],
   preferences: {
     theme: 'system',
+    uiStyle: 'default',
     autoSync: false,
     backupBeforeReplace: true,
   },

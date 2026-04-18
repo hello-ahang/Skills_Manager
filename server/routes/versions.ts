@@ -48,7 +48,8 @@ router.post('/', async (req: Request, res: Response) => {
 // GET /api/versions/:id — Get version detail
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const detail = await getVersionDetail(req.params.id);
+    const id = req.params.id as string;
+    const detail = await getVersionDetail(id);
     if (!detail) {
       res.status(404).json({ error: 'Version not found' });
       return;
@@ -63,10 +64,11 @@ router.get('/:id', async (req: Request, res: Response) => {
 // POST /api/versions/:id/restore — Restore a version
 router.post('/:id/restore', async (req: Request, res: Response) => {
   try {
-    const result = await restoreVersion(req.params.id);
+    const id = req.params.id as string;
+    const result = await restoreVersion(id);
     res.json(result);
     // Analytics: record version-restore event (non-blocking)
-    recordEvent(req.params.id, '', 'version-restore').catch(() => {});
+    recordEvent(id, '', 'version-restore').catch(() => {});
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to restore version';
     res.status(500).json({ error: message });
@@ -76,7 +78,8 @@ router.post('/:id/restore', async (req: Request, res: Response) => {
 // DELETE /api/versions/:id — Delete a version
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    await deleteVersion(req.params.id);
+    const id = req.params.id as string;
+    await deleteVersion(id);
     res.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to delete version';
@@ -87,7 +90,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
 // GET /api/versions/:id/diff — Diff current vs version
 router.get('/:id/diff', async (req: Request, res: Response) => {
   try {
-    const diffs = await diffVersion(req.params.id);
+    const id = req.params.id as string;
+    const diffs = await diffVersion(id);
     res.json({ diffs });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to diff version';

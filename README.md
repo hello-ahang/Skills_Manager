@@ -44,7 +44,29 @@ Skills 统一管理平台 — 为同时使用 Claude、Qoder、QoderWork、Openc
 - Node.js 20+
 - npm 9+
 
-### 一键安装
+### 方式一：npm 安装（推荐）
+
+```bash
+# 直接运行（无需安装）
+npx ahang-skills-manager
+
+# 或全局安装后运行
+npm install -g ahang-skills-manager
+ahang-skills-manager
+```
+
+启动后自动打开浏览器访问 `http://localhost:3001`。
+
+**CLI 参数：**
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--port <number>` | 指定服务端口 | 3001 |
+| `--no-open` | 启动后不自动打开浏览器 | - |
+| `-v, --version` | 显示版本号 | - |
+| `-h, --help` | 显示帮助信息 | - |
+
+### 方式二：源码安装
 
 ```bash
 # 1. 克隆项目
@@ -75,7 +97,7 @@ npm run stop    # 停止并清理端口
 ```
 
 启动后访问：
-- **前端**: http://localhost:5173
+- **前端**: http://localhost:5173（开发模式）
 - **后端 API**: http://localhost:3001
 
 ### 一键卸载

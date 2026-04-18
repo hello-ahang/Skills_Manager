@@ -1,17 +1,37 @@
 {
-  "name": "skills-manager",
+  "name": "ahang-skills-manager",
   "version": "1.0.0",
-  "private": true,
+  "description": "多 AI 工具 Skills 统一管理平台 — 支持 Claude、Cursor、CodeBuddy、Copilot 等",
   "type": "module",
+  "bin": {
+    "ahang-skills-manager": "./dist/server/server/cli.js"
+  },
+  "files": [
+    "dist/",
+    "templates/",
+    "data/config.example.json",
+    "public/"
+  ],
   "scripts": {
     "dev": "concurrently -k -n CLIENT,SERVER -c blue,green \"npm run dev:client\" \"npm run dev:server\"",
     "stop": "lsof -ti:3001 | xargs kill -9 2>/dev/null; lsof -ti:5173 | xargs kill -9 2>/dev/null; lsof -ti:5174 | xargs kill -9 2>/dev/null; echo '✅ 已关闭项目并清理端口 3001/5173/5174'",
     "dev:client": "vite",
     "dev:server": "tsx --watch server/index.ts",
-    "build": "tsc -b && vite build",
-    "start": "node dist/server/index.js",
+    "build": "vite build",
+    "build:server": "tsc -p tsconfig.server.json",
+    "build:all": "npm run build && npm run build:server",
+    "prepublishOnly": "npm run build:all",
+    "start": "node dist/server/server/index.js",
     "preview": "vite preview"
   },
+  "keywords": ["skills", "ai", "cursor", "claude", "copilot", "codebuddy", "manager", "prompt"],
+  "author": "阿航",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hello-ahang/Skills_Manager.git"
+  },
+  "homepage": "https://github.com/hello-ahang/Skills_Manager#readme",
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
     "@tailwindcss/typography": "^0.5.19",

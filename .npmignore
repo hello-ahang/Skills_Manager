@@ -1,0 +1,29 @@
+# Source files (compiled output is in dist/)
+src/
+server/
+*.ts
+!*.d.ts
+
+# Config files
+tsconfig*.json
+vite.config.ts
+components.json
+index.html
+.gitignore
+
+# Dev files
+.git/
+node_modules/
+docs/
+install.sh
+uninstall.sh
+.DS_Store
+*.log
+
+# User-specific data
+data/config.json
+data/analytics.json
+
+# IDE
+.vscode/
+.idea/

@@ -37,7 +37,11 @@ app.get('/api/health', (_req, res) => {
 
 // Production: serve static files
 if (process.env.NODE_ENV === 'production') {
-  const clientDist = path.join(__dirname, '../dist');
+  // Support both local dev build and npm global install
+  // In npm install: compiled JS is at dist/server/server/index.js, frontend at dist/
+  // SM_PKG_ROOT is set by cli.ts to the package root directory
+  const pkgRoot = process.env.SM_PKG_ROOT || path.resolve(__dirname, '..');
+  const clientDist = path.join(pkgRoot, 'dist');
   app.use(express.static(clientDist));
   app.get('*', (_req, res) => {
     res.sendFile(path.join(clientDist, 'index.html'));
