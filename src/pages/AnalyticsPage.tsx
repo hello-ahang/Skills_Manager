@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { analyticsApi } from '@/api/client'
+import { analyticsApi, importApi } from '@/api/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -37,7 +37,71 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { AnalyticsDashboard, AnalyticsEvent } from '@/types'
+import type { AnalyticsDashboard, AnalyticsEvent, ImportStats } from '@/types'
+
+// Import Stats Card component for the analytics dashboard
+function ImportStatsCard() {
+  const [stats, setStats] = useState<ImportStats | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    importApi.getStats()
+      .then(res => setStats(res.stats))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading || !stats || stats.totalImports === 0) return null
+
+  const maxCount = Math.max(...stats.bySource.map(s => s.count), 1)
+  const sourceLabels: Record<string, string> = {
+    github: 'GitHub', gitee: 'Gitee', gitlab: 'GitLab', bitbucket: 'Bitbucket',
+    local: '本地', zip: 'ZIP', clipboard: '剪贴板', batch: '批量',
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Download className="h-4 w-4" />
+          导入来源分布
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="text-center">
+            <div className="text-xl font-bold">{stats.totalImports}</div>
+            <div className="text-xs text-muted-foreground">总导入</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xl font-bold text-green-600">{stats.successRate}%</div>
+            <div className="text-xs text-muted-foreground">成功率</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xl font-bold">{stats.bySource.length}</div>
+            <div className="text-xs text-muted-foreground">来源渠道</div>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {stats.bySource.slice(0, 5).map((item) => (
+            <div key={item.source} className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span>{sourceLabels[item.source] || item.source}</span>
+                <span className="text-muted-foreground">{item.count}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary transition-all"
+                  style={{ width: `${(item.count / maxCount) * 100}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
 
 const EVENT_CONFIG: Record<string, { label: string; icon: typeof Eye; color: string }> = {
   'view': { label: '查看', icon: Eye, color: 'text-blue-500' },
@@ -217,6 +281,9 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Import Stats Card */}
+      <ImportStatsCard />
 
       {/* Main Content: Skills Ranking + Recent Activity */}
       <div className="grid grid-cols-5 gap-6">

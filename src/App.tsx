@@ -10,6 +10,7 @@ import SkillsPage from '@/pages/SkillsPage'
 import HelpPage from '@/pages/HelpPage'
 import AnalyticsPage from '@/pages/AnalyticsPage'
 import HomePage from '@/pages/HomePage'
+import ImportPage from '@/pages/ImportPage'
 
 function App() {
   const fetchConfig = useConfigStore(s => s.fetchConfig)
@@ -28,6 +29,7 @@ function App() {
               <Route path="/home" element={<HomePage />} />
               <Route path="/projects" element={<ProjectsPage />} />
               <Route path="/skills" element={<SkillsPage />} />
+              <Route path="/import" element={<ImportPage />} />
               <Route path="/links" element={<Navigate to="/projects" replace />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/help" element={<HelpPage />} />

@@ -164,3 +164,127 @@ export const analyticsApi = {
   clearAll: () =>
     request<{ success: boolean }>('/analytics', { method: 'DELETE' }),
 };
+
+// ==================== Import API ====================
+
+export const importApi = {
+  // Select local path (opens system file picker)
+  selectPath: () =>
+    request<{ path: string }>('/import/select-path', { method: 'POST' }),
+
+  // Git tokens (stored in user local config)
+  getGitTokens: () =>
+    request<{ github: string; gitee: string; gitlab: string }>('/import/git-tokens'),
+  saveGitTokens: (tokens: { github?: string; gitee?: string; gitlab?: string }) =>
+    request<{ success: boolean }>('/import/git-tokens', { method: 'PUT', body: tokens }),
+
+  // Scan endpoints
+  scanGitHub: (url: string, branch?: string) =>
+    request<{ skills: any[]; repoInfo: any }>('/import/scan/github', { method: 'POST', body: { url, branch } }),
+  scanGitee: (url: string, branch?: string) =>
+    request<{ skills: any[]; repoInfo: any }>('/import/scan/gitee', { method: 'POST', body: { url, branch } }),
+  scanGitLab: (url: string, branch?: string) =>
+    request<{ skills: any[]; repoInfo: any }>('/import/scan/gitlab', { method: 'POST', body: { url, branch } }),
+  scanBitbucket: (url: string, branch?: string) =>
+    request<{ skills: any[]; repoInfo: any }>('/import/scan/bitbucket', { method: 'POST', body: { url, branch } }),
+  scanClawHub: (url: string, branch?: string) =>
+    request<{ skills: any[]; repoInfo: any }>('/import/scan/clawhub', { method: 'POST', body: { url, branch } }),
+  scanLocal: (path: string) =>
+    request<{ skills: any[] }>('/import/scan/local', { method: 'POST', body: { path } }),
+  scanClipboard: (content: string) =>
+    request<{ skills: any[] }>('/import/scan/clipboard', { method: 'POST', body: { content } }),
+  scanAuto: (url: string, branch?: string) =>
+    request<{ skills: any[]; repoInfo?: any; sourceType: string }>('/import/scan/auto', { method: 'POST', body: { url, branch } }),
+
+  // Upload
+  uploadZip: async (file: File): Promise<{ tempPath: string; tempDir: string; skills: any[] }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE}/import/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+      throw new ApiError(response.status, error.error || 'Upload failed');
+    }
+    return response.json();
+  },
+
+  // Execute
+  execute: (data: { source: string; skills: any[]; options: any; sourceUrl?: string }) =>
+    request<{ result: any }>('/import/execute', { method: 'POST', body: data }),
+
+  // Batch
+  batch: (urls: string[], options: any) =>
+    request<{ result: any }>('/import/batch', { method: 'POST', body: { urls, options } }),
+
+  // Conflict check
+  checkConflict: (skillNames: string[], targetSourceDirId?: string) =>
+    request<{ conflicts: any[] }>('/import/check-conflict', { method: 'POST', body: { skillNames, targetSourceDirId } }),
+
+  // History
+  getHistory: (source?: string, limit?: number) => {
+    const params = new URLSearchParams();
+    if (source) params.set('source', source);
+    if (limit) params.set('limit', String(limit));
+    const qs = params.toString();
+    return request<{ history: any[] }>(`/import/history${qs ? `?${qs}` : ''}`);
+  },
+  deleteHistory: (id: string) =>
+    request<{ success: boolean }>(`/import/history/${id}`, { method: 'DELETE' }),
+  clearHistory: () =>
+    request<{ success: boolean }>('/import/history', { method: 'DELETE' }),
+
+  // Subscriptions
+  getSubscriptions: () =>
+    request<{ subscriptions: any[] }>('/import/subscriptions'),
+  subscribe: (data: { skillPath: string; skillName: string; source: string; sourceUrl: string; branch?: string; version?: string }) =>
+    request<{ subscription: any }>('/import/subscribe', { method: 'POST', body: data }),
+  unsubscribe: (skillPath: string) =>
+    request<{ success: boolean }>('/import/subscribe', { method: 'DELETE', body: { skillPath } }),
+  checkUpdate: (skillPath: string) =>
+    request<{ hasUpdate: boolean; subscription: any; newFiles?: any[] }>('/import/check-update', { method: 'POST', body: { skillPath } }),
+  applyUpdate: (skillPath: string) =>
+    request<{ result: any }>('/import/apply-update', { method: 'POST', body: { skillPath } }),
+  checkAllUpdates: () =>
+    request<{ results: { id: string; skillName: string; hasUpdate: boolean; currentVersion?: string; latestVersion?: string }[] }>('/import/check-all-updates', { method: 'POST' }),
+  setAutoUpdate: (enabled: boolean, interval?: string) =>
+    request<{ success: boolean }>('/import/auto-update', { method: 'PUT', body: { enabled, interval } }),
+
+  // CSV/JSON
+  importCSV: (content: string, options: any) =>
+    request<{ result: any }>('/import/import/csv', { method: 'POST', body: { content, options } }),
+  importJSON: (content: string, options: any) =>
+    request<{ result: any }>('/import/import/json', { method: 'POST', body: { content, options } }),
+  exportCSV: async (): Promise<void> => {
+    const response = await fetch(`${API_BASE}/import/export/csv`);
+    if (!response.ok) throw new Error('Export failed');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'import-history.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  exportJSON: async (): Promise<void> => {
+    const response = await fetch(`${API_BASE}/import/export/json`);
+    if (!response.ok) throw new Error('Export failed');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'import-history.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
+  // Stats
+  getStats: () =>
+    request<{ stats: any }>('/import/stats'),
+
+  // Cleanup
+  cleanup: () =>
+    request<{ success: boolean }>('/import/cleanup', { method: 'POST' }),
+};

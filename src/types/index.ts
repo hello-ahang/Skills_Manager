@@ -340,3 +340,96 @@ export interface UpdateConfigRequest {
   tools?: { type: string; enabled: boolean }[];
   preferences?: Partial<AppPreferences>;
 }
+
+// ==================== Import Center ====================
+
+export type ImportSource = 'github' | 'gitee' | 'gitlab' | 'bitbucket' | 'clawhub' | 'local' | 'zip' | 'clipboard' | 'batch' | 'csv' | 'json';
+export type ImportMode = 'copy' | 'move' | 'symlink';
+export type ImportConflictStrategy = 'overwrite' | 'rename' | 'skip' | 'merge';
+
+export interface ImportOptions {
+  targetSourceDirId?: string;
+  conflictStrategy: ImportConflictStrategy;
+  importMode: ImportMode;
+  autoSnapshot: boolean;
+}
+
+export interface ScannedSkill {
+  name: string;
+  path: string;
+  description?: string;
+  fileCount: number;
+  totalSize: number;
+  isValid: boolean;
+  files: { relativePath: string; size: number }[];
+  hasConflict?: boolean;
+  conflictAction?: ImportConflictStrategy;
+  selected?: boolean;
+}
+
+export interface ImportResult {
+  source: ImportSource;
+  sourceUrl?: string;
+  totalCount: number;
+  successCount: number;
+  skipCount: number;
+  failCount: number;
+  importedSkills: { name: string; path: string }[];
+  skippedSkills: { name: string; reason: string }[];
+  failedSkills: { name: string; error: string }[];
+  duration: number;
+}
+
+export interface ImportHistoryItem {
+  id: string;
+  source: ImportSource;
+  sourceUrl?: string;
+  timestamp: string;
+  result: ImportResult;
+  version?: string;
+  subscribed?: boolean;
+}
+
+export interface Subscription {
+  id: string;
+  skillPath: string;
+  skillName: string;
+  source: ImportSource;
+  sourceUrl: string;
+  branch?: string;
+  version?: string;
+  latestVersion?: string;
+  hasUpdate?: boolean;
+  subscribedAt: string;
+  lastCheckedAt?: string;
+  lastUpdatedAt?: string;
+  autoUpdate: boolean;
+}
+
+export interface ImportSettings {
+  defaultSourceDirId: string;
+  defaultConflictStrategy: ImportConflictStrategy;
+  defaultImportMode: ImportMode;
+  autoSnapshotOnImport: boolean;
+  clipboardDetection: boolean;
+  autoCleanTempFiles: boolean;
+  autoUpdateInterval: 'daily' | 'weekly' | 'monthly' | 'disabled';
+}
+
+export interface ImportStats {
+  totalImports: number;
+  bySource: { source: ImportSource; count: number }[];
+  successRate: number;
+  avgDuration: number;
+  recentTrend: { date: string; count: number }[];
+}
+
+export interface RepoInfo {
+  name: string;
+  description?: string;
+  stars?: number;
+  defaultBranch: string;
+  branches?: string[];
+  url: string;
+  version?: string;
+}

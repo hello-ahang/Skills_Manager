@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { FolderOpen, BookOpen, BarChart3, Home, ChevronLeft, ChevronRight } from 'lucide-react'
+import { FolderOpen, BookOpen, BarChart3, Home, ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import {
   Tooltip,
   TooltipContent,
@@ -11,6 +11,7 @@ import {
 const navItems = [
   { path: '/home', label: '首页', icon: Home },
   { path: '/skills', label: 'Skills 库', icon: BookOpen },
+  { path: '/import', label: '导入中心', icon: Download },
   { path: '/projects', label: '项目管理', icon: FolderOpen },
   { path: '/analytics', label: '使用分析', icon: BarChart3 },
 ]

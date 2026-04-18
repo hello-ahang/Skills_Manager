@@ -32,6 +32,7 @@ interface UserConfig {
   llmModels: LLMModel[];
   projects: any[];
   dismissedPaths: string[];
+  gitTokens: { github?: string; gitee?: string; gitlab?: string };
 }
 
 const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
@@ -80,6 +81,7 @@ const DEFAULT_USER_CONFIG: UserConfig = {
   llmModels: [],
   projects: [],
   dismissedPaths: [],
+  gitTokens: {},
 };
 
 /**
@@ -190,7 +192,7 @@ async function getProjectConfig(): Promise<ProjectConfig> {
 /**
  * Read user-level config from ~/.skills-manager/user-config.json
  */
-async function getUserConfig(): Promise<UserConfig> {
+export async function getUserConfig(): Promise<UserConfig> {
   try {
     await fs.ensureDir(USER_CONFIG_DIR);
     if (await fs.pathExists(USER_CONFIG_PATH)) {
@@ -217,7 +219,7 @@ async function saveProjectConfig(config: ProjectConfig): Promise<void> {
 /**
  * Save user-level config
  */
-async function saveUserConfig(config: UserConfig): Promise<void> {
+export async function saveUserConfig(config: UserConfig): Promise<void> {
   await fs.ensureDir(USER_CONFIG_DIR);
   // Keep sourceDir in sync with active source dir
   if (config.activeSourceDirId && config.sourceDirs.length > 0) {
@@ -259,6 +261,7 @@ export async function saveConfig(config: AppConfig): Promise<void> {
     llmModels: config.llmModels,
     projects: config.projects,
     dismissedPaths: (config as any).dismissedPaths || [],
+    gitTokens: (config as any).gitTokens || {},
   };
 
   await Promise.all([

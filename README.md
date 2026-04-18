@@ -14,6 +14,7 @@ Skills 统一管理平台 — 为同时使用 Claude、Qoder、QoderWork、Openc
 |------|------|
 | **项目管理** | 添加/管理本地项目，自动检测 AI 工具配置（`.claude/`、`.cursor/`、`.codebuddy/` 等），支持文件夹浏览 |
 | **Skills 库** | 树形文件浏览、Monaco Editor 在线编辑、Markdown 预览、全文搜索、AI 生成技能、AI 优化技能（含草稿对比）、Skill 自定义别名、版本管理（快照/对比/回滚）、导出 ZIP |
+| **导入中心** | 支持 GitHub、ClawHub、本地文件、ZIP、剪贴板、批量导入等多渠道一键导入 Skills，导入历史记录、订阅管理（版本追踪、批量检查更新） |
 | **使用分析** | 事件埋点、仪表盘概览、热门 Skills 排行、最近活动时间线，数据本地存储 |
 
 ## 核心特性
@@ -24,6 +25,10 @@ Skills 统一管理平台 — 为同时使用 Claude、Qoder、QoderWork、Openc
 - **AI 优化技能**：对已有技能进行 AI 优化，支持 DiffEditor 对比原始内容与草稿，确认后替换
 - **Skill 自定义别名**：为 Skill 设置自定义展示名称，不修改文件夹，支持设置/修改/清除，localStorage 持久化
 - **版本管理**：为 Skill 创建快照、查看版本历史、对比差异、一键回滚，AI 优化时自动创建备份
+- **导入中心**：支持 GitHub、ClawHub、本地文件、ZIP、剪贴板、批量导入等多渠道一键导入 Skills
+- **ClawHub 集成**：从 ClawHub 技能市场直接导入 OpenClaw Skills，自动提取版本号
+- **导入历史**：记录每次导入操作，支持按来源过滤，版本号显示
+- **订阅管理**：订阅 GitHub/ClawHub 来源的 Skills，支持批量检查更新、版本号追踪、一键更新
 - **使用分析**：轻量级本地分析仪表盘，追踪查看/编辑/AI 优化/导出等操作，热门 Skills 排行、最近活动时间线
 - **导出功能**：将技能文件夹打包为 ZIP 下载
 - **多主题支持**：浅色/深色/像素风格切换
@@ -138,14 +143,18 @@ skills-manager/
 │   │   ├── projects.ts        # 项目管理 API
 │   │   ├── skills.ts          # Skills 文件 API
 │   │   ├── links.ts           # 链接管理 API
-│   │   └── tools.ts           # 工具 API（导出等）
+│   │   ├── tools.ts           # 工具 API（导出等）
+│   │   └── import.ts          # 导入中心 API
 │   ├── services/
 │   │   ├── configService.ts   # 配置管理
 │   │   ├── fileService.ts     # 文件操作
 │   │   ├── linkService.ts     # 软链接操作
 │   │   ├── scanService.ts     # 项目扫描
 │   │   ├── convertService.ts  # 格式转换
-│   │   └── templateService.ts # 模板管理
+│   │   ├── templateService.ts # 模板管理
+│   │   ├── importService.ts   # 导入服务（GitHub/ClawHub/ZIP 等）
+│   │   ├── importHistoryService.ts  # 导入历史
+│   │   └── subscriptionService.ts   # 订阅管理
 │   └── utils/
 │       ├── symlink.ts         # 软链接工具函数
 │       └── validation.ts      # 输入验证
@@ -176,6 +185,7 @@ skills-manager/
 │   ├── pages/
 │   │   ├── ProjectsPage.tsx   # 项目管理页
 │   │   ├── SkillsPage.tsx     # Skills 库页
+│   │   ├── ImportPage.tsx     # 导入中心页
 │   │   ├── AnalyticsPage.tsx  # 使用分析页
 │   │   └── HelpPage.tsx       # 帮助中心页
 │   ├── stores/                # Zustand 状态管理
@@ -262,6 +272,13 @@ skills-manager/
 | POST | `/api/links/remove` | 移除链接 |
 | POST | `/api/links/verify` | 验证链接 |
 | POST | `/api/tools/export` | 导出 ZIP |
+| POST | `/api/import/scan/github` | 扫描 GitHub 仓库 |
+| POST | `/api/import/scan/clawhub` | 扫描 ClawHub Skill |
+| POST | `/api/import/execute` | 执行导入 |
+| GET | `/api/import/history` | 获取导入历史 |
+| GET | `/api/import/subscriptions` | 获取订阅列表 |
+| POST | `/api/import/subscribe` | 订阅来源 |
+| POST | `/api/import/check-all-updates` | 批量检查更新 |
 
 ## 支持的 AI 工具
 

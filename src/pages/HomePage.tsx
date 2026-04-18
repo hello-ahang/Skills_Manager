@@ -138,7 +138,7 @@ export default function HomePage() {
               </div>
               <div className="flex items-center gap-1.5">
                 <Download className="h-3 w-3 text-primary shrink-0" />
-                <p className="text-[11px] text-muted-foreground">一键导出 Skills 文件</p>
+                <p className="text-[11px] text-muted-foreground">导入中心，多源导入 Skills</p>
               </div>
               <div className="flex items-center gap-1.5">
                 <Palette className="h-3 w-3 text-primary shrink-0" />

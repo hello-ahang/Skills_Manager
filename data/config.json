@@ -52,8 +52,8 @@
   ],
   "preferences": {
     "theme": "system",
+    "uiStyle": "default",
     "autoSync": false,
-    "backupBeforeReplace": true,
-    "uiStyle": "default"
+    "backupBeforeReplace": true
   }
 }
