@@ -24,7 +24,7 @@ router.get('/targets', async (_req: Request, res: Response) => {
 // POST /api/publish/:targetId - Publish a skill to a target
 router.post('/:targetId', async (req: Request, res: Response) => {
   try {
-    const { targetId } = req.params;
+    const targetId = req.params.targetId as string;
     const { skillPath, options } = req.body;
 
     if (!skillPath) {
@@ -53,7 +53,8 @@ router.post('/:targetId', async (req: Request, res: Response) => {
 // GET /api/publish/:targetId/status/:publishId - Get publish status
 router.get('/:targetId/status/:publishId', async (req: Request, res: Response) => {
   try {
-    const { targetId, publishId } = req.params;
+    const targetId = req.params.targetId as string;
+    const publishId = req.params.publishId as string;
 
     const target = getPublishTarget(targetId);
     if (!target) {
@@ -77,7 +78,7 @@ router.get('/:targetId/status/:publishId', async (req: Request, res: Response) =
 // GET /api/publish/:targetId/list - Get published skills list
 router.get('/:targetId/list', async (req: Request, res: Response) => {
   try {
-    const { targetId } = req.params;
+    const targetId = req.params.targetId as string;
 
     const target = getPublishTarget(targetId);
     if (!target) {

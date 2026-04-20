@@ -794,7 +794,7 @@ router.post('/extensions/upload', extensionUpload.single('file'), async (req: Re
 router.delete('/extensions/:name', async (req: Request, res: Response) => {
   try {
     const extDir = path.join(os.homedir(), '.skills-manager', 'extensions');
-    const filePath = path.join(extDir, req.params.name);
+    const filePath = path.join(extDir, req.params.name as string);
 
     if (!await fs.pathExists(filePath)) {
       res.status(404).json({ error: '扩展插件不存在' });
