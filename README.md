@@ -19,6 +19,12 @@ Skills 统一管理平台 — 为同时使用 Claude、Qoder、QoderWork、Openc
 | **发布集成** | 发布 Skills 到云端 AI 平台（悟空等）、内置软链接同步、审核状态追踪、发布历史管理 |
 | **工具同步优化** | 工具特性数据库（生效方式/已知问题）、编辑后生效提示 toast、项目卡片工具标签、导入后自动同步 |
 | **使用分析** | 事件埋点、仪表盘概览、热门 Skills 排行、最近活动时间线，数据本地存储 |
+<img width="800" height="447" alt="slide_01" src="https://github.com/user-attachments/assets/85d10408-96e0-4c19-9fc8-17d49f960928" />
+<img width="800" height="447" alt="slide_02" src="https://github.com/user-attachments/assets/076550a4-7e75-4a57-b48d-c23f6504bcbd" />
+<img width="800" height="447" alt="slide_03" src="https://github.com/user-attachments/assets/bf0a3ff4-5883-41b5-abea-024581701231" />
+<img width="800" height="447" alt="slide_04" src="https://github.com/user-attachments/assets/53804a3e-4a54-44a3-9dd2-3d30818ec2dd" />
+<img width="800" height="447" alt="slide_05" src="https://github.com/user-attachments/assets/49983ad6-b582-414f-bd5a-b438dba3f97b" />
+<img width="800" height="447" alt="slide_06" src="https://github.com/user-attachments/assets/b0c88d62-9227-4c5d-b357-335af80c2630" />
 
 ## 核心特性
 
