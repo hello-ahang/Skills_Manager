@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useConfigStore } from '@/stores/configStore'
 import { configApi } from '@/api/client'
-import { Moon, Sun, Monitor, Gamepad2, Layout, Bot, Plus, Pencil, Trash2, Zap, Loader2, CheckCircle2, HelpCircle } from 'lucide-react'
+import { Moon, Sun, Monitor, Gamepad2, Layout, Bot, Plus, Pencil, Trash2, Zap, Loader2, CheckCircle2, HelpCircle, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -265,6 +265,19 @@ export default function Header() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Quick Import Shortcut Hint */}
+          <button
+            onClick={() => navigate('/import')}
+            className="flex items-center gap-1.5 rounded-md border border-dashed border-muted-foreground/30 px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+            title="点击或使用快捷键快速跳转到导入中心，支持 GitHub、ClawHub、本地文件等多种导入方式"
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span>快速导入</span>
+            <kbd className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono border border-muted-foreground/20">
+              {typeof navigator !== 'undefined' && navigator.platform?.includes('Mac') ? '⌘' : 'Ctrl+'}I
+            </kbd>
+          </button>
 
           {/* Model Config Button */}
           <Button

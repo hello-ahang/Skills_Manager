@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react'
 import { useImportStore } from '@/stores/importStore'
 import { useConfigStore } from '@/stores/configStore'
+import { importApi } from '@/api/client'
 import ImportWizard from '@/components/import/ImportWizard'
 import GitRepoImporter from '@/components/import/GitRepoImporter'
 import LocalImporter from '@/components/import/LocalImporter'
@@ -11,14 +13,27 @@ import SubscriptionManager from '@/components/import/SubscriptionManager'
 import ImportSettings from '@/components/import/ImportSettings'
 import ImportAnalytics from '@/components/import/ImportAnalytics'
 import ClawHubImporter from '@/components/import/ClawHubImporter'
+import ExtensionProviderPane from '@/components/import/ExtensionProviderPane'
 import {
   Download, History, Bell, Settings, BarChart3, Plus,
   GitBranch, FolderOpen, Archive, ClipboardPaste, Link2,
-  AlertCircle, Sparkles,
+  AlertCircle, Sparkles, GitMerge, Package, Clipboard,
+  FileArchive, Github, Puzzle,
 } from 'lucide-react'
+import type { ImportProviderInfo } from '@/types'
 
-/* ── Import method definitions ── */
-const importMethods = [
+/* ── Icon mapping for dynamic providers ── */
+const iconMap: Record<string, any> = {
+  Github, GitBranch, GitMerge, Package, Clipboard, ClipboardPaste,
+  FileArchive, FolderOpen, Link2, Sparkles, Puzzle,
+}
+
+function getProviderIcon(iconName: string) {
+  return iconMap[iconName] || Puzzle
+}
+
+/* ── Built-in import method definitions (fallback) ── */
+const builtinImportMethods = [
   { id: 'git' as const, label: 'GitHub', icon: GitBranch },
   { id: 'clawhub' as const, label: 'ClawHub', icon: Sparkles },
   { id: 'local' as const, label: '本地文件', icon: FolderOpen },
@@ -44,6 +59,26 @@ export default function ImportPage() {
 
   const sourceDirs = useConfigStore(s => s.sourceDirs)
   const activeSourceDirId = useConfigStore(s => s.activeSourceDirId)
+  const enableExtensionProviders = useConfigStore(s => s.preferences?.enableExtensionProviders ?? false)
+
+  // Dynamic providers from API (extensions) — only load when enabled
+  const [customProviders, setCustomProviders] = useState<ImportProviderInfo[]>([])
+
+  useEffect(() => {
+    if (!enableExtensionProviders) {
+      setCustomProviders([])
+      return
+    }
+    importApi.getProviders()
+      .then(({ providers }) => {
+        // Filter out builtin providers (already handled by hardcoded methods)
+        const custom = providers.filter(p => p.group === 'custom')
+        setCustomProviders(custom)
+      })
+      .catch(() => {
+        // Silently ignore — extensions are optional
+      })
+  }, [enableExtensionProviders])
 
   const isImportActive = activeTab === 'import'
   const isStep1 = importStep === 1
@@ -86,9 +121,9 @@ export default function ImportPage() {
                 /* Step 1: Left nav + Right form */
                 <div className="flex min-h-[400px]">
                   {/* Left: method navigation */}
-                  <div className="w-36 shrink-0 border-r bg-muted/20">
+                  <div className="w-52 shrink-0 border-r bg-muted/20">
                     <div className="p-2 space-y-0.5">
-                      {importMethods.map((method) => {
+                      {builtinImportMethods.map((method) => {
                         const Icon = method.icon
                         const isActive = selectedImportMethod === method.id
                         return (
@@ -106,6 +141,34 @@ export default function ImportPage() {
                           </button>
                         )
                       })}
+
+                      {/* Extension providers */}
+                      {customProviders.length > 0 && (
+                        <>
+                          <div className="border-t my-1.5" />
+                          <div className="px-2.5 py-1">
+                            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">扩展</span>
+                          </div>
+                          {customProviders.map((provider) => {
+                            const Icon = getProviderIcon(provider.icon)
+                            const isActive = selectedImportMethod === provider.id
+                            return (
+                              <button
+                                key={provider.id}
+                                onClick={() => setSelectedImportMethod(provider.id as any)}
+                                className={`w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors text-left ${
+                                  isActive
+                                    ? 'bg-primary/10 text-primary font-medium'
+                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                }`}
+                              >
+                                <Icon className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">{provider.name}</span>
+                              </button>
+                            )
+                          })}
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -120,6 +183,14 @@ export default function ImportPage() {
                         {selectedImportMethod === 'zip' && <ZipImporter />}
                         {selectedImportMethod === 'clipboard' && <ClipboardImporter />}
                         {selectedImportMethod === 'batch' && <BatchImporter />}
+
+                        {/* Extension provider fallback */}
+                        {!['git', 'clawhub', 'local', 'zip', 'clipboard', 'batch'].includes(selectedImportMethod) && (
+                          <ExtensionProviderPane
+                            providerId={selectedImportMethod}
+                            providers={customProviders}
+                          />
+                        )}
 
                         {scanError && (
                           <div className="flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-500">

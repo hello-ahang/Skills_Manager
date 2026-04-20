@@ -59,6 +59,7 @@ export interface FileTreeNode {
   children?: FileTreeNode[];
   description?: string;
   isValidSkill?: boolean;
+  version?: string;
 }
 
 // ==================== Link Management ====================
@@ -148,6 +149,14 @@ export interface ToolDefinition {
   configDir: string;
   skillsDir: string;
   enabled: boolean;
+  /** Symlink support level */
+  symlinkSupport?: 'full' | 'partial' | 'none';
+  /** How skills take effect after modification */
+  reloadMethod?: 'auto' | 'manual-reload' | 'restart-required' | 'reopen-session';
+  /** User-facing hint about how to make changes take effect */
+  reloadHint?: string;
+  /** Known issues or caveats */
+  knownIssues?: string[];
 }
 
 export type UIStyle = 'default' | 'pixel';
@@ -157,6 +166,10 @@ export interface AppPreferences {
   uiStyle: UIStyle;
   autoSync: boolean;
   backupBeforeReplace: boolean;
+  /** Auto-sync to all bound projects after importing skills */
+  autoSyncAfterImport?: boolean;
+  /** Enable extension providers (custom import sources / publish targets) */
+  enableExtensionProviders?: boolean;
 }
 
 // ==================== Version Management ====================
@@ -343,7 +356,7 @@ export interface UpdateConfigRequest {
 
 // ==================== Import Center ====================
 
-export type ImportSource = 'github' | 'gitee' | 'gitlab' | 'bitbucket' | 'clawhub' | 'local' | 'zip' | 'clipboard' | 'batch' | 'csv' | 'json';
+export type ImportSource = 'github' | 'gitee' | 'gitlab' | 'bitbucket' | 'clawhub' | 'local' | 'zip' | 'clipboard' | 'batch' | 'csv' | 'json' | (string & {});
 export type ImportMode = 'copy' | 'move' | 'symlink';
 export type ImportConflictStrategy = 'overwrite' | 'rename' | 'skip' | 'merge';
 
@@ -432,4 +445,54 @@ export interface RepoInfo {
   branches?: string[];
   url: string;
   version?: string;
+}
+
+// ==================== Import Provider ====================
+
+export interface ImportProviderInfo {
+  id: string;
+  name: string;
+  icon: string;
+  group: 'builtin' | 'custom';
+  requiresAuth?: boolean;
+  authFields?: { key: string; label: string; type: 'text' | 'password'; placeholder?: string }[];
+}
+
+// ==================== Publish Target ====================
+
+export interface PublishTargetInfo {
+  id: string;
+  name: string;
+  icon: string;
+  group: 'builtin' | 'custom';
+  description: string;
+  requiresAuth?: boolean;
+  authFields?: { key: string; label: string; type: 'text' | 'password'; placeholder?: string }[];
+}
+
+export interface PublishResult {
+  success: boolean;
+  publishId?: string;
+  status: 'published' | 'pending_review' | 'failed';
+  message: string;
+  url?: string;
+  details?: LinkOperation[];
+}
+
+export interface PublishStatus {
+  publishId: string;
+  status: 'pending_review' | 'approved' | 'rejected';
+  reviewComment?: string;
+  updatedAt: string;
+}
+
+export interface PublishedSkill {
+  id: string;
+  skillName: string;
+  skillPath: string;
+  targetId: string;
+  publishId: string;
+  status: 'published' | 'pending_review' | 'approved' | 'rejected';
+  publishedAt: string;
+  url?: string;
 }

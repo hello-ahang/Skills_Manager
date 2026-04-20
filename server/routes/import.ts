@@ -21,6 +21,8 @@ import {
   checkConflicts,
   cleanupTempFiles,
   detectUrlType,
+  getImportProviders,
+  detectProvider,
 } from '../services/importService.js';
 import { getUserConfig, saveUserConfig } from '../services/configService.js';
 import type { ImportOptions, ScannedSkill } from '../../src/types/index.js';
@@ -70,6 +72,92 @@ router.put('/git-tokens', async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to save git tokens' });
+  }
+});
+
+// ==================== Provider Endpoints ====================
+
+// GET /api/import/providers - Get all registered import providers
+router.get('/providers', async (_req: Request, res: Response) => {
+  try {
+    const providers = getImportProviders().map(p => ({
+      id: p.id,
+      name: p.name,
+      icon: p.icon,
+      group: p.group,
+      requiresAuth: p.requiresAuth,
+      authFields: p.authFields,
+    }));
+    res.json({ providers });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get providers' });
+  }
+});
+
+// POST /api/import/scan/provider/:providerId - Universal scan endpoint via provider
+router.post('/scan/provider/:providerId', async (req: Request, res: Response) => {
+  try {
+    const { providerId } = req.params;
+    const { input, options } = req.body;
+
+    if (!input) {
+      res.status(400).json({ error: 'Input is required' });
+      return;
+    }
+
+    const providers = getImportProviders();
+    const provider = providers.find(p => p.id === providerId);
+    if (!provider) {
+      res.status(404).json({ error: `Provider "${providerId}" not found` });
+      return;
+    }
+
+    // Merge auth tokens from user config if provider needs auth
+    let scanOptions = options || {};
+    if (provider.requiresAuth || provider.authFields) {
+      const userConfig = await getUserConfig();
+      const tokenKey = providerId as keyof typeof userConfig.gitTokens;
+      if (userConfig.gitTokens?.[tokenKey] && !scanOptions.token) {
+        scanOptions = { ...scanOptions, token: userConfig.gitTokens[tokenKey] };
+      }
+    }
+
+    const result = await provider.scan(input, scanOptions);
+    res.json({ ...result, providerId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : `Failed to scan via provider`;
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/import/scan/auto-detect - Auto-detect provider from URL and scan
+router.post('/scan/auto-detect', async (req: Request, res: Response) => {
+  try {
+    const { url, options } = req.body;
+    if (!url) {
+      res.status(400).json({ error: 'URL is required' });
+      return;
+    }
+
+    const provider = detectProvider(url);
+    if (!provider) {
+      res.status(400).json({ error: 'No provider found for this URL. Supported: GitHub, Gitee, GitLab, Bitbucket, ClawHub' });
+      return;
+    }
+
+    // Merge auth tokens from user config
+    let scanOptions = options || {};
+    const userConfig = await getUserConfig();
+    const tokenKey = provider.id as keyof typeof userConfig.gitTokens;
+    if (userConfig.gitTokens?.[tokenKey] && !scanOptions.token) {
+      scanOptions = { ...scanOptions, token: userConfig.gitTokens[tokenKey] };
+    }
+
+    const result = await provider.scan(url, scanOptions);
+    res.json({ ...result, providerId: provider.id });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to auto-detect and scan URL';
+    res.status(500).json({ error: message });
   }
 });
 
@@ -477,6 +565,11 @@ router.post('/subscribe', async (req: Request, res: Response) => {
       return;
     }
     const subscription = await subscribe(skillPath, skillName, source, sourceUrl, branch, version);
+    // Persist subscribed flag in import history so it survives page refresh
+    try {
+      const { markHistorySubscribed } = await import('../services/importHistoryService.js');
+      await markHistorySubscribed(sourceUrl);
+    } catch { /* ignore history update errors */ }
     res.json({ subscription });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to subscribe';
@@ -626,6 +719,92 @@ router.get('/stats', async (_req: Request, res: Response) => {
     res.json({ stats });
   } catch (error) {
     res.status(500).json({ error: 'Failed to get import stats' });
+  }
+});
+
+// ==================== Extension Plugins ====================
+
+// Configure multer for extension plugin uploads (only .js files)
+const extensionUpload = multer({
+  dest: path.join(os.tmpdir(), 'skills-manager-ext-uploads'),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext === '.js' || ext === '.mjs') {
+      cb(null, true);
+    } else {
+      cb(new Error(`仅支持 .js 文件，当前文件类型: ${ext}`));
+    }
+  },
+});
+
+// GET /api/import/extensions - List installed extension plugins
+router.get('/extensions', async (_req: Request, res: Response) => {
+  try {
+    const extDir = path.join(os.homedir(), '.skills-manager', 'extensions');
+    await fs.ensureDir(extDir);
+    const files = await fs.readdir(extDir);
+    const extensions = files
+      .filter(f => f.endsWith('.js') || f.endsWith('.mjs'))
+      .map(f => ({ name: f, path: path.join(extDir, f) }));
+    res.json({ extensions, directory: extDir });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to list extensions' });
+  }
+});
+
+// POST /api/import/extensions/upload - Upload an extension plugin (.js file)
+router.post('/extensions/upload', extensionUpload.single('file'), async (req: Request, res: Response) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: '未上传文件' });
+      return;
+    }
+
+    const extDir = path.join(os.homedir(), '.skills-manager', 'extensions');
+    await fs.ensureDir(extDir);
+
+    const targetPath = path.join(extDir, req.file.originalname);
+
+    // Check if file already exists
+    const exists = await fs.pathExists(targetPath);
+
+    // Copy uploaded file to extensions directory
+    await fs.copy(req.file.path, targetPath, { overwrite: true });
+
+    // Clean up temp file
+    await fs.remove(req.file.path).catch(() => {});
+
+    res.json({
+      success: true,
+      name: req.file.originalname,
+      path: targetPath,
+      replaced: exists,
+      message: exists
+        ? `扩展插件 ${req.file.originalname} 已更新，重启后生效`
+        : `扩展插件 ${req.file.originalname} 已安装，重启后生效`,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to upload extension';
+    res.status(500).json({ error: message });
+  }
+});
+
+// DELETE /api/import/extensions/:name - Remove an extension plugin
+router.delete('/extensions/:name', async (req: Request, res: Response) => {
+  try {
+    const extDir = path.join(os.homedir(), '.skills-manager', 'extensions');
+    const filePath = path.join(extDir, req.params.name);
+
+    if (!await fs.pathExists(filePath)) {
+      res.status(404).json({ error: '扩展插件不存在' });
+      return;
+    }
+
+    await fs.remove(filePath);
+    res.json({ success: true, message: `扩展插件 ${req.params.name} 已删除，重启后生效` });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete extension' });
   }
 });
 

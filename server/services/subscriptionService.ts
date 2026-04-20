@@ -156,12 +156,18 @@ export async function checkUpdate(skillPath: string): Promise<{
     const latestVersion = scanResult.repoInfo?.version;
     if (latestVersion) {
       sub.latestVersion = latestVersion;
-      sub.hasUpdate = latestVersion !== sub.version;
+      // If no version recorded yet (first-time subscription), treat current as up-to-date
+      if (!sub.version) {
+        sub.version = latestVersion;
+        sub.hasUpdate = false;
+      } else {
+        sub.hasUpdate = latestVersion !== sub.version;
+      }
     }
 
     await writeSubscriptions(subs);
 
-    // Compare file counts/sizes as a heuristic
+    // Compare file counts/sizes as a heuristic (only if version check didn't find update)
     const currentFiles = await collectCurrentFiles(skillPath);
     const remoteSkill = scanResult.skills.find((s: any) => s.name === sub.skillName) || scanResult.skills[0];
 
@@ -170,8 +176,11 @@ export async function checkUpdate(skillPath: string): Promise<{
     }
 
     const hasVersionUpdate = latestVersion ? latestVersion !== sub.version : false;
-    const hasFileUpdate = remoteSkill.fileCount !== currentFiles.length ||
-      remoteSkill.totalSize !== currentFiles.reduce((sum: number, f: any) => sum + f.size, 0);
+    // Only use file heuristic when there's no version info at all
+    const hasFileUpdate = !latestVersion && (
+      remoteSkill.fileCount !== currentFiles.length ||
+      remoteSkill.totalSize !== currentFiles.reduce((sum: number, f: any) => sum + f.size, 0)
+    );
     const hasUpdate = hasVersionUpdate || hasFileUpdate;
 
     return {
@@ -212,9 +221,13 @@ export async function applyUpdate(skillPath: string): Promise<ImportResult> {
 
   const result = await importService.executeImport(scanResult.skills, options, sub.source as any, sub.sourceUrl);
 
-  // Update subscription
+  // Update subscription — record current version from latestVersion
   sub.lastUpdatedAt = new Date().toISOString();
   sub.lastCheckedAt = new Date().toISOString();
+  if (sub.latestVersion) {
+    sub.version = sub.latestVersion;
+  }
+  sub.hasUpdate = false;
   await writeSubscriptions(subs);
 
   return result;

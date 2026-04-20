@@ -43,6 +43,10 @@ const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
       configDir: '.claude',
       skillsDir: 'skills',
       enabled: true,
+      symlinkSupport: 'full',
+      reloadMethod: 'auto',
+      reloadHint: 'Claude automatically detects skill changes, no action needed.',
+      knownIssues: ['/skills command may not list symlinked skills, but they still work.'],
     },
     {
       type: 'cursor',
@@ -50,6 +54,10 @@ const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
       configDir: '.cursor',
       skillsDir: 'skills',
       enabled: true,
+      symlinkSupport: 'full',
+      reloadMethod: 'reopen-session',
+      reloadHint: 'Start a new chat session for changes to take effect.',
+      knownIssues: [],
     },
     {
       type: 'codebuddy',
@@ -57,6 +65,10 @@ const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
       configDir: '.codebuddy',
       skillsDir: 'skills',
       enabled: true,
+      symlinkSupport: 'full',
+      reloadMethod: 'auto',
+      reloadHint: 'CodeBuddy automatically detects skill changes.',
+      knownIssues: [],
     },
     {
       type: 'copilot',
@@ -64,6 +76,10 @@ const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
       configDir: '.github',
       skillsDir: 'copilot/skills',
       enabled: false,
+      symlinkSupport: 'full',
+      reloadMethod: 'reopen-session',
+      reloadHint: 'Start a new chat session for changes to take effect.',
+      knownIssues: [],
     },
   ],
   preferences: {
@@ -71,6 +87,7 @@ const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
     uiStyle: 'default',
     autoSync: false,
     backupBeforeReplace: true,
+    enableExtensionProviders: false,
   },
 };
 
