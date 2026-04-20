@@ -39,6 +39,27 @@ router.get('/', async (req: Request, res: Response) => {
       return;
     }
     const tree = await buildFileTree(targetDir);
+
+    // Inject version info from subscriptions into top-level skill directories
+    try {
+      const fs = await import('fs-extra');
+      const os = await import('os');
+      const subsPath = path.join(os.default.homedir(), '.skills-manager', 'subscriptions.json');
+      if (await fs.default.pathExists(subsPath)) {
+        const subs: any[] = await fs.default.readJson(subsPath);
+        if (subs.length > 0) {
+          for (const node of tree) {
+            if (node.type === 'directory') {
+              const sub = subs.find((s: any) => s.skillName === node.name);
+              if (sub?.version || sub?.latestVersion) {
+                node.version = sub.version || sub.latestVersion;
+              }
+            }
+          }
+        }
+      }
+    } catch { /* ignore subscription lookup errors */ }
+
     res.json({ tree, sourceDir: targetDir });
   } catch (error) {
     res.status(500).json({ error: 'Failed to get skills tree' });

@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Project, SourceDir } from '@/types'
+import { Project, SourceDir, ToolDefinition } from '@/types'
+import { useConfigStore } from '@/stores/configStore'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { FolderOpen, Trash2, Link, Unlink, RefreshCw, FileText, Folder, ChevronDown, ChevronUp, Sparkles, Eye } from 'lucide-react'
+import { FolderOpen, Trash2, Link, Unlink, RefreshCw, FileText, Folder, ChevronDown, ChevronUp, Sparkles, Eye, Info } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,6 +62,60 @@ function resolveSourceDirName(linkedTo: string | undefined, sourceDirs: SourceDi
   if (!linkedTo || sourceDirs.length === 0) return null
   const found = sourceDirs.find(sd => linkedTo === sd.path || linkedTo.startsWith(sd.path + '/'))
   return found ? found.name : null
+}
+
+/** Tool reload method badges — shows how each enabled tool handles skill changes */
+function ToolReloadBadges() {
+  const tools = useConfigStore(s => s.tools) as ToolDefinition[]
+  const enabledTools = tools.filter(t => t.enabled && t.reloadMethod)
+
+  if (enabledTools.length === 0) return null
+
+  const reloadMethodConfig: Record<string, { label: string; className: string }> = {
+    'auto': { label: '自动生效', className: 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800' },
+    'restart-required': { label: '需重启', className: 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800' },
+    'reopen-session': { label: '需新对话', className: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800' },
+    'manual-reload': { label: '需手动刷新', className: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800' },
+  }
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <div className="flex items-center gap-1 flex-wrap mt-1">
+        {enabledTools.map(tool => {
+          const config = reloadMethodConfig[tool.reloadMethod || 'auto'] || reloadMethodConfig['auto']
+          const hasIssues = tool.knownIssues && tool.knownIssues.length > 0
+
+          return (
+            <Tooltip key={tool.type}>
+              <TooltipTrigger asChild>
+                <span className={cn(
+                  'inline-flex items-center gap-0.5 rounded border px-1.5 py-0 text-[10px] font-normal cursor-default',
+                  config.className
+                )}>
+                  {tool.name}: {config.label}
+                  {hasIssues && <Info className="h-2.5 w-2.5 ml-0.5 opacity-60" />}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs p-2.5 space-y-1">
+                <p className="text-xs font-medium">{tool.name}</p>
+                {tool.reloadHint && (
+                  <p className="text-[11px] text-muted-foreground">{tool.reloadHint}</p>
+                )}
+                {hasIssues && (
+                  <div className="mt-1 pt-1 border-t">
+                    <p className="text-[10px] font-medium text-yellow-600 dark:text-yellow-400">Known Issues:</p>
+                    {tool.knownIssues!.map((issue, i) => (
+                      <p key={i} className="text-[10px] text-muted-foreground">• {issue}</p>
+                    ))}
+                  </div>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          )
+        })}
+      </div>
+    </TooltipProvider>
+  )
 }
 
 export default function ProjectCard({
@@ -145,6 +200,11 @@ export default function ProjectCard({
                     </Badge>
                   )}
                 </div>
+
+                {/* Tool reload method badges */}
+                {isLinked && (
+                  <ToolReloadBadges />
+                )}
                 <p className="text-sm text-muted-foreground mt-0.5 break-all line-clamp-1" title={project.path}>
                   {project.path}
                 </p>

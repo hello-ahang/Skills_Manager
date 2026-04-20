@@ -19,7 +19,7 @@ export default function ImportWizard() {
     scannedSkills, importOptions, setImportOptions,
     setImporting, setImportProgress, setImportResult,
     toggleSkillSelection, selectAllSkills,
-    sourceUrl,
+    sourceUrl, repoInfo,
   } = useImportStore()
 
   // Filter mode: 'valid' = only valid skills, 'all' = all folders
@@ -31,6 +31,11 @@ export default function ImportWizard() {
   const selectedCount = scannedSkills.filter(s => s.selected).length
   const hasConflicts = scannedSkills.some(s => s.hasConflict && s.selected)
 
+  // SSE progress state
+  const [progressInfo, setProgressInfo] = useState<{
+    current: number; total: number; skillName: string;
+  }>({ current: 0, total: 0, skillName: '' })
+
   const handleExecuteImport = async () => {
     const selectedSkills = scannedSkills.filter(s => s.selected)
     if (selectedSkills.length === 0) {
@@ -41,17 +46,35 @@ export default function ImportWizard() {
     setImporting(true)
     setImportStep(3)
     setImportProgress('正在导入...')
+    setProgressInfo({ current: 0, total: selectedSkills.length, skillName: '' })
 
     try {
-      const result = await importApi.execute({
-        source: importSource || 'local',
-        skills: selectedSkills,
-        options: importOptions,
-        sourceUrl: sourceUrl || undefined,
-      })
-      setImportResult(result.result)
-      setImportStep(4)
-      toast.success(`导入完成: ${result.result.successCount} 个成功`)
+      await importApi.executeWithProgress(
+        {
+          source: importSource || 'local',
+          skills: selectedSkills,
+          options: importOptions,
+          sourceUrl: sourceUrl || undefined,
+          version: repoInfo?.version || undefined,
+        },
+        (event) => {
+          if (event.type === 'progress') {
+            setProgressInfo({
+              current: event.current ?? 0,
+              total: event.total ?? selectedSkills.length,
+              skillName: event.skillName ?? '',
+            })
+            setImportProgress(`正在导入 ${event.skillName}... (${event.current}/${event.total})`)
+          } else if (event.type === 'complete' && event.result) {
+            setImportResult(event.result)
+            setImportStep(4)
+            toast.success(`导入完成: ${event.result.successCount} 个成功`)
+          } else if (event.type === 'error') {
+            toast.error(event.message || '导入失败')
+            setImportStep(2)
+          }
+        },
+      )
     } catch (error: any) {
       toast.error(error.message || '导入失败')
       setImportStep(2)
@@ -221,12 +244,35 @@ export default function ImportWizard() {
     )
   }
 
-  // Step 3: Executing
+  // Step 3: Executing with progress
   if (importStep === 3) {
+    const percent = progressInfo.total > 0
+      ? Math.round((progressInfo.current / progressInfo.total) * 100)
+      : 0
+
     return (
       <div className="flex flex-col items-center justify-center py-12 space-y-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
         <p className="text-sm font-medium">正在导入...</p>
+
+        {/* Progress bar */}
+        <div className="w-64 space-y-2">
+          <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300 ease-out"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span className="truncate max-w-[180px]">
+              {progressInfo.skillName || '准备中...'}
+            </span>
+            <span className="shrink-0 ml-2">
+              {progressInfo.current}/{progressInfo.total}
+            </span>
+          </div>
+        </div>
+
         <p className="text-xs text-muted-foreground">请勿关闭页面</p>
       </div>
     )

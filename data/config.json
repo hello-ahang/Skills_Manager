@@ -5,55 +5,90 @@
       "name": "Claude",
       "configDir": ".claude",
       "skillsDir": "skills",
-      "enabled": false
+      "enabled": false,
+      "symlinkSupport": "full",
+      "reloadMethod": "auto",
+      "reloadHint": "Claude automatically detects skill changes, no action needed.",
+      "knownIssues": [
+        "/skills command may not list symlinked skills, but they still work."
+      ]
     },
     {
       "type": "cursor",
       "name": "Cursor",
       "configDir": ".cursor",
       "skillsDir": "skills-cursor",
-      "enabled": false
+      "enabled": false,
+      "symlinkSupport": "full",
+      "reloadMethod": "reopen-session",
+      "reloadHint": "Start a new chat session for changes to take effect.",
+      "knownIssues": []
     },
     {
       "type": "codebuddy",
       "name": "CodeBuddy",
       "configDir": ".codebuddy",
       "skillsDir": "skills",
-      "enabled": false
+      "enabled": false,
+      "symlinkSupport": "full",
+      "reloadMethod": "auto",
+      "reloadHint": "CodeBuddy automatically detects skill changes.",
+      "knownIssues": []
     },
     {
       "type": "copilot",
       "name": "GitHub Copilot",
       "configDir": ".github",
       "skillsDir": "copilot/skills",
-      "enabled": false
+      "enabled": false,
+      "symlinkSupport": "full",
+      "reloadMethod": "reopen-session",
+      "reloadHint": "Start a new chat session for changes to take effect.",
+      "knownIssues": []
     },
     {
       "type": "qoder",
       "name": "Qoder",
       "configDir": ".qoder",
       "skillsDir": "skills",
-      "enabled": false
+      "enabled": false,
+      "symlinkSupport": "full",
+      "reloadMethod": "restart-required",
+      "reloadHint": "Restart Qoder for changes to take effect. Close and reopen the application.",
+      "knownIssues": [
+        "Qoder loads skills at startup; runtime changes are not detected automatically."
+      ]
     },
     {
       "type": "codex",
       "name": "Codex",
       "configDir": ".codex",
       "skillsDir": "skills",
-      "enabled": false
+      "enabled": false,
+      "symlinkSupport": "full",
+      "reloadMethod": "auto",
+      "reloadHint": "Codex automatically detects skill changes.",
+      "knownIssues": []
     },
     {
       "type": "qoderwork",
       "name": "QoderWork",
       "configDir": ".qoderwork",
       "skillsDir": "skills",
-      "enabled": false
+      "enabled": false,
+      "symlinkSupport": "full",
+      "reloadMethod": "restart-required",
+      "reloadHint": "Restart QoderWork for changes to take effect. Close and reopen the application.",
+      "knownIssues": [
+        "QoderWork loads skills at startup; runtime changes are not detected automatically."
+      ]
     }
   ],
   "preferences": {
     "theme": "system",
     "uiStyle": "default",
     "autoSync": false,
-    "backupBeforeReplace": true
+    "backupBeforeReplace": true,
+    "enableExtensionProviders": true
   }
 }

@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { FileTreeNode } from '@/types'
 import { cn } from '@/lib/utils'
-import { ChevronRight, ChevronDown, File, Folder, FolderOpen, Trash2, Plus, ChevronsUpDown, ChevronsDownUp, FilePlus, FolderPlus, Pencil, MoreHorizontal, Sparkles, Wand2, Download, Tag, X, History } from 'lucide-react'
+import { ChevronRight, ChevronDown, File, Folder, FolderOpen, Trash2, Plus, ChevronsUpDown, ChevronsDownUp, FilePlus, FolderPlus, Pencil, MoreHorizontal, Sparkles, Wand2, Download, Tag, X, History, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -36,6 +36,7 @@ interface FileTreeProps {
   onSetAlias?: (dirPath: string, currentAlias?: string) => void
   onRemoveAlias?: (dirPath: string) => void
   onVersionHistory?: (dirPath: string, dirName: string) => void
+  onPublishTo?: (dirPath: string, dirName: string) => void
 }
 
 interface TreeNodeProps {
@@ -56,9 +57,10 @@ interface TreeNodeProps {
   onSetAlias?: (dirPath: string, currentAlias?: string) => void
   onRemoveAlias?: (dirPath: string) => void
   onVersionHistory?: (dirPath: string, dirName: string) => void
+  onPublishTo?: (dirPath: string, dirName: string) => void
 }
 
-function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, onSelectFile, onDeleteFile, onDeleteDir, onCreateFile, onCreateDir, onRename, onAIOptimize, onExport, skillAliases, onSetAlias, onRemoveAlias, onVersionHistory }: TreeNodeProps) {
+function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, onSelectFile, onDeleteFile, onDeleteDir, onCreateFile, onCreateDir, onRename, onAIOptimize, onExport, skillAliases, onSetAlias, onRemoveAlias, onVersionHistory, onPublishTo }: TreeNodeProps) {
   const isSelected = node.path === selectedFile
   const isDirectory = node.type === 'directory'
   const expanded = expandedPaths.has(node.path)
@@ -119,6 +121,12 @@ function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, on
               title={node.description}
             >
               {node.description}
+            </span>
+          )}
+          {isDirectory && node.version && depth === 0 && (
+            <span className="inline-flex items-center gap-0.5 text-[10px] leading-tight text-primary/70 font-mono">
+              <Tag className="h-2.5 w-2.5" />
+              v{node.version}
             </span>
           )}
         </div>
@@ -188,6 +196,12 @@ function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, on
                     </DropdownMenuItem>
                   </>
                 )}
+                {isDirectory && node.isValidSkill && depth === 0 && onPublishTo && (
+                  <DropdownMenuItem onClick={() => onPublishTo(node.path, node.name)}>
+                    <Send className="mr-2 h-3.5 w-3.5" />
+                    发布到...
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
@@ -251,6 +265,7 @@ function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, on
               onSetAlias={onSetAlias}
               onRemoveAlias={onRemoveAlias}
               onVersionHistory={onVersionHistory}
+              onPublishTo={onPublishTo}
             />
           ))}
         </div>
@@ -287,7 +302,7 @@ function collectDefaultExpanded(nodes: FileTreeNode[], depth = 0): string[] {
   return paths
 }
 
-export default function FileTree({ nodes, selectedFile, onSelectFile, onDeleteFile, onDeleteDir, onCreateFile, onCreateDir, onRename, onAIOptimize, onExport, skillAliases, onSetAlias, onRemoveAlias, onVersionHistory }: FileTreeProps) {
+export default function FileTree({ nodes, selectedFile, onSelectFile, onDeleteFile, onDeleteDir, onCreateFile, onCreateDir, onRename, onAIOptimize, onExport, skillAliases, onSetAlias, onRemoveAlias, onVersionHistory, onPublishTo }: FileTreeProps) {
   // Default: all directories collapsed
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const allDirPaths = useMemo(() => collectDirPaths(nodes), [nodes])
@@ -368,6 +383,7 @@ export default function FileTree({ nodes, selectedFile, onSelectFile, onDeleteFi
             onSetAlias={onSetAlias}
             onRemoveAlias={onRemoveAlias}
             onVersionHistory={onVersionHistory}
+            onPublishTo={onPublishTo}
           />
         ))}
       </div>

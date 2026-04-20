@@ -73,3 +73,26 @@ export async function deleteHistory(id: string): Promise<void> {
 export async function clearHistory(): Promise<void> {
   await writeHistory([]);
 }
+
+export async function updateHistoryItem(id: string, updates: Partial<ImportHistoryItem>): Promise<void> {
+  const history = await readHistory();
+  const index = history.findIndex(h => h.id === id);
+  if (index >= 0) {
+    history[index] = { ...history[index], ...updates };
+    await writeHistory(history);
+  }
+}
+
+export async function markHistorySubscribed(sourceUrl: string): Promise<void> {
+  const history = await readHistory();
+  let changed = false;
+  for (const item of history) {
+    if (item.sourceUrl === sourceUrl && !item.subscribed) {
+      item.subscribed = true;
+      changed = true;
+    }
+  }
+  if (changed) {
+    await writeHistory(history);
+  }
+}

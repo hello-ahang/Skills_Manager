@@ -131,4 +131,19 @@ router.get('/readme', async (_req: Request, res: Response) => {
   }
 });
 
+// GET /api/config/changelog - Get CHANGELOG.md content
+router.get('/changelog', async (_req: Request, res: Response) => {
+  try {
+    const changelogPath = path.resolve(process.cwd(), 'CHANGELOG.md');
+    if (await fs.pathExists(changelogPath)) {
+      const content = await fs.readFile(changelogPath, 'utf-8');
+      res.json({ content });
+    } else {
+      res.status(404).json({ error: 'CHANGELOG.md not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to read CHANGELOG.md' });
+  }
+});
+
 export default router;

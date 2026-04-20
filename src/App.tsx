@@ -1,7 +1,8 @@
-import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect, useState, useCallback } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { Toaster } from '@/components/ui/sonner'
 import { useConfigStore } from '@/stores/configStore'
+import { useImportStore } from '@/stores/importStore'
 import Sidebar from '@/components/layout/Sidebar'
 import Header from '@/components/layout/Header'
 import ProjectsPage from '@/pages/ProjectsPage'
@@ -11,6 +12,81 @@ import HelpPage from '@/pages/HelpPage'
 import AnalyticsPage from '@/pages/AnalyticsPage'
 import HomePage from '@/pages/HomePage'
 import ImportPage from '@/pages/ImportPage'
+import { Upload } from 'lucide-react'
+
+/** Global drag-and-drop overlay + keyboard shortcut handler */
+function GlobalHandlers() {
+  const navigate = useNavigate()
+  const { setActiveTab, resetWizard, setSelectedImportMethod } = useImportStore()
+  const [isDragging, setIsDragging] = useState(false)
+
+  // Global keyboard shortcut: Ctrl+I / Cmd+I → navigate to Import Center
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+        e.preventDefault()
+        setActiveTab('import')
+        resetWizard()
+        navigate('/import')
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [navigate, setActiveTab, resetWizard])
+
+  // Global drag-and-drop: dragging files into the window triggers import
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragging(true)
+    }
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // Only hide overlay when leaving the window (relatedTarget is null)
+    if (!e.relatedTarget || !(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+      setIsDragging(false)
+    }
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    const files = e.dataTransfer.files
+    if (files.length > 0) {
+      // Navigate to import center with local import method selected
+      setActiveTab('import')
+      resetWizard()
+      setSelectedImportMethod('local')
+      navigate('/import')
+    }
+  }, [navigate, setActiveTab, resetWizard, setSelectedImportMethod])
+
+  return (
+    <div
+      className="contents"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-4 border-dashed border-primary/50 pointer-events-none">
+          <div className="flex flex-col items-center gap-3 text-primary">
+            <Upload className="h-12 w-12 animate-bounce" />
+            <p className="text-lg font-medium">Drop files here to import</p>
+            <p className="text-sm text-muted-foreground">Release to open Import Center</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function App() {
   const fetchConfig = useConfigStore(s => s.fetchConfig)
@@ -48,6 +124,7 @@ function App() {
           </a>
         </div>
       </div>
+      <GlobalHandlers />
       <Toaster />
     </BrowserRouter>
   )

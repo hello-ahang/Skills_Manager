@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import { skillsApi } from '@/api/client'
-import type { FileTreeNode, SkillTemplate } from '@/types'
+import { skillsApi, configApi } from '@/api/client'
+import { toast } from 'sonner'
+import type { FileTreeNode, SkillTemplate, ToolDefinition } from '@/types'
 
 export type EditorMode = 'preview' | 'edit' | 'diff' | 'markdown-preview'
 
@@ -136,6 +137,28 @@ export const useSkillsStore = create<SkillsState>()((set, get) => ({
         originalContent: fileContent,
         editorMode: 'preview',
       })
+
+      // Show reload hints for tools that need manual action
+      try {
+        const config = await configApi.get()
+        const tools: ToolDefinition[] = config.tools || []
+        const toolsNeedingAction = tools.filter(
+          (t: ToolDefinition) => t.enabled && t.reloadMethod && t.reloadMethod !== 'auto'
+        )
+        if (toolsNeedingAction.length > 0) {
+          const hints = toolsNeedingAction
+            .map((t: ToolDefinition) => `${t.name}: ${t.reloadHint || 'Manual action required'}`)
+            .join('\n')
+          toast.info('Skills saved. Some tools need action to take effect:', {
+            description: hints,
+            duration: 8000,
+          })
+        } else {
+          toast.success('文件已保存')
+        }
+      } catch {
+        toast.success('文件已保存')
+      }
     } catch (error) {
       set({ saving: false, error: 'Failed to save file' })
     }

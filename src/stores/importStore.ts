@@ -10,7 +10,8 @@ import type {
   RepoInfo,
 } from '@/types';
 
-type ImportMethod = 'git' | 'local' | 'zip' | 'clipboard' | 'batch' | 'clawhub';
+type BuiltinImportMethod = 'git' | 'local' | 'zip' | 'clipboard' | 'batch' | 'clawhub';
+type ImportMethod = BuiltinImportMethod | (string & {});
 type GitPlatform = 'github' | 'gitee' | 'gitlab';
 
 interface ImportState {

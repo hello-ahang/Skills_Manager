@@ -212,8 +212,50 @@ export const importApi = {
   },
 
   // Execute
-  execute: (data: { source: string; skills: any[]; options: any; sourceUrl?: string }) =>
+  execute: (data: { source: string; skills: any[]; options: any; sourceUrl?: string; version?: string }) =>
     request<{ result: any }>('/import/execute', { method: 'POST', body: data }),
+
+  // Execute with SSE progress
+  executeWithProgress: (
+    data: { source: string; skills: any[]; options: any; sourceUrl?: string; version?: string },
+    onProgress: (event: { type: string; current?: number; total?: number; skillName?: string; result?: any; message?: string }) => void,
+  ): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      fetch(`${API_BASE}/import-stream/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).then(response => {
+        if (!response.ok) {
+          response.json().then(err => reject(new Error(err.error || 'Import failed'))).catch(() => reject(new Error('Import failed')));
+          return;
+        }
+        const reader = response.body?.getReader();
+        if (!reader) { reject(new Error('No response body')); return; }
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        function read() {
+          reader!.read().then(({ done, value }) => {
+            if (done) { resolve(); return; }
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const event = JSON.parse(line.slice(6));
+                  onProgress(event);
+                } catch { /* ignore parse errors */ }
+              }
+            }
+            read();
+          }).catch(reject);
+        }
+        read();
+      }).catch(reject);
+    });
+  },
 
   // Batch
   batch: (urls: string[], options: any) =>
@@ -287,4 +329,41 @@ export const importApi = {
   // Cleanup
   cleanup: () =>
     request<{ success: boolean }>('/import/cleanup', { method: 'POST' }),
+
+  // Providers
+  getProviders: () =>
+    request<{ providers: any[] }>('/import/providers'),
+  scanByProvider: (providerId: string, input: string, options?: Record<string, string>) =>
+    request<{ skills: any[]; repoInfo?: any; providerId: string }>(`/import/scan/provider/${providerId}`, { method: 'POST', body: { input, options } }),
+  scanAutoDetect: (url: string, options?: Record<string, string>) =>
+    request<{ skills: any[]; repoInfo?: any; providerId: string }>('/import/scan/auto-detect', { method: 'POST', body: { url, options } }),
+
+  // Extensions
+  getExtensions: () =>
+    request<{ extensions: { name: string; path: string }[]; directory: string }>('/import/extensions'),
+  uploadExtension: async (file: File): Promise<{ success: boolean; name: string; path: string; replaced: boolean; message: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE}/import/extensions/upload`, { method: 'POST', body: formData });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Upload failed' }));
+      throw new Error(err.error || 'Upload failed');
+    }
+    return res.json();
+  },
+  deleteExtension: (name: string) =>
+    request<{ success: boolean; message: string }>(`/import/extensions/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+};
+
+// ==================== Publish API ====================
+
+export const publishApi = {
+  getTargets: () =>
+    request<{ targets: any[] }>('/publish/targets'),
+  publish: (targetId: string, data: { skillPath: string; options?: any }) =>
+    request<{ result: any }>(`/publish/${targetId}`, { method: 'POST', body: data }),
+  getStatus: (targetId: string, publishId: string) =>
+    request<any>(`/publish/${targetId}/status/${publishId}`),
+  listPublished: (targetId: string) =>
+    request<{ published: any[] }>(`/publish/${targetId}/list`),
 };

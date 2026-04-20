@@ -14,7 +14,10 @@ Skills 统一管理平台 — 为同时使用 Claude、Qoder、QoderWork、Openc
 |------|------|
 | **项目管理** | 添加/管理本地项目，自动检测 AI 工具配置（`.claude/`、`.cursor/`、`.codebuddy/` 等），支持文件夹浏览 |
 | **Skills 库** | 树形文件浏览、Monaco Editor 在线编辑、Markdown 预览、全文搜索、AI 生成技能、AI 优化技能（含草稿对比）、Skill 自定义别名、版本管理（快照/对比/回滚）、导出 ZIP |
-| **导入中心** | 支持 GitHub、ClawHub、本地文件、ZIP、剪贴板、批量导入等多渠道一键导入 Skills，导入历史记录、订阅管理（版本追踪、批量检查更新） |
+| **导入中心** | 支持 GitHub、ClawHub、Aone 开放平台、本地文件、ZIP、剪贴板、批量导入等多渠道一键导入 Skills，导入历史记录（版本号追踪）、订阅管理（版本追踪、批量检查更新），全局拖放导入、实时进度条（SSE）、快捷键 Ctrl+I / Cmd+I |
+| **扩展系统** | Provider 注册模式、文件级扩展加载（`~/.skills-manager/extensions/`）、自定义导入源和发布目标、设置中导入/删除扩展插件，零侵入开源代码 |
+| **发布集成** | 发布 Skills 到云端 AI 平台（悟空等）、内置软链接同步、审核状态追踪、发布历史管理 |
+| **工具同步优化** | 工具特性数据库（生效方式/已知问题）、编辑后生效提示 toast、项目卡片工具标签、导入后自动同步 |
 | **使用分析** | 事件埋点、仪表盘概览、热门 Skills 排行、最近活动时间线，数据本地存储 |
 
 ## 核心特性
@@ -25,11 +28,20 @@ Skills 统一管理平台 — 为同时使用 Claude、Qoder、QoderWork、Openc
 - **AI 优化技能**：对已有技能进行 AI 优化，支持 DiffEditor 对比原始内容与草稿，确认后替换
 - **Skill 自定义别名**：为 Skill 设置自定义展示名称，不修改文件夹，支持设置/修改/清除，localStorage 持久化
 - **版本管理**：为 Skill 创建快照、查看版本历史、对比差异、一键回滚，AI 优化时自动创建备份
-- **导入中心**：支持 GitHub、ClawHub、本地文件、ZIP、剪贴板、批量导入等多渠道一键导入 Skills
+- **导入中心**：支持 GitHub、ClawHub、Aone 开放平台、本地文件、ZIP、剪贴板、批量导入等多渠道一键导入 Skills
 - **ClawHub 集成**：从 ClawHub 技能市场直接导入 OpenClaw Skills，自动提取版本号
-- **导入历史**：记录每次导入操作，支持按来源过滤，版本号显示
-- **订阅管理**：订阅 GitHub/ClawHub 来源的 Skills，支持批量检查更新、版本号追踪、一键更新
+- **Aone 开放平台集成**：从 Aone 开放平台导入 Skills，支持 `@scope/name` 和无 scope 两种 URL 格式，Cookie 认证
+- **导入历史**：记录每次导入操作，支持按来源过滤，版本号显示，扩展 provider 来源名称动态显示
+- **订阅管理**：订阅 GitHub/ClawHub/扩展 provider 来源的 Skills，支持批量检查更新、版本号追踪、一键更新
 - **使用分析**：轻量级本地分析仪表盘，追踪查看/编辑/AI 优化/导出等操作，热门 Skills 排行、最近活动时间线
+- **Provider 注册模式**：轻量级扩展机制，通过在 `~/.skills-manager/extensions/` 放置 `.js` 扩展文件即可注册自定义导入源和发布目标，无需修改开源代码
+- **扩展插件管理**：设置中支持导入/删除扩展插件（`.js` 文件），无需手动操作文件系统
+- **发布集成（Publish Target）**：支持将 Skills 发布到云端 AI 平台（如悟空智能体平台），内置软链接同步目标，支持审核状态追踪
+- **工具同步优化**：工具特性数据库记录各 AI 工具的生效方式，编辑 Skill 保存后自动提示"需重启"或"需新对话"，项目卡片展示工具生效标签
+- **导入后自动同步**：导入 Skills 后可自动触发软链接同步到所有已绑定项目
+- **全局拖放导入**：拖拽文件/文件夹到浏览器窗口，自动跳转导入中心并触发导入流程
+- **导入进度实时展示**：通过 SSE 实时推送导入进度，前端展示进度条和当前处理的 Skill 名称
+- **快捷键支持**：Ctrl+I / Cmd+I 快速跳转到导入中心
 - **导出功能**：将技能文件夹打包为 ZIP 下载
 - **多主题支持**：浅色/深色/像素风格切换
 - **帮助中心**：内置使用指南
@@ -138,13 +150,16 @@ skills-manager/
 │
 ├── server/                    # 后端代码
 │   ├── index.ts               # Express 入口
+│   ├── extensions.ts          # 扩展加载机制
 │   ├── routes/
 │   │   ├── config.ts          # 配置 API
 │   │   ├── projects.ts        # 项目管理 API
 │   │   ├── skills.ts          # Skills 文件 API
 │   │   ├── links.ts           # 链接管理 API
 │   │   ├── tools.ts           # 工具 API（导出等）
-│   │   └── import.ts          # 导入中心 API
+│   │   ├── import.ts          # 导入中心 API
+│   │   ├── import-stream.ts   # 导入进度 SSE 端点
+│   │   └── publish.ts         # 发布集成 API
 │   ├── services/
 │   │   ├── configService.ts   # 配置管理
 │   │   ├── fileService.ts     # 文件操作
@@ -152,8 +167,9 @@ skills-manager/
 │   │   ├── scanService.ts     # 项目扫描
 │   │   ├── convertService.ts  # 格式转换
 │   │   ├── templateService.ts # 模板管理
-│   │   ├── importService.ts   # 导入服务（GitHub/ClawHub/ZIP 等）
+│   │   ├── importService.ts   # 导入服务（GitHub/ClawHub/ZIP 等 + Provider 注册）
 │   │   ├── importHistoryService.ts  # 导入历史
+│   │   ├── publishService.ts  # 发布服务（Publish Target 注册）
 │   │   └── subscriptionService.ts   # 订阅管理
 │   └── utils/
 │       ├── symlink.ts         # 软链接工具函数
@@ -194,6 +210,12 @@ skills-manager/
 │   │   └── skillsStore.ts     # Skills 状态
 │   ├── hooks/                 # 自定义 Hooks
 │   └── types/                 # TypeScript 类型定义
+│
+├── docs/                      # 文档
+│   ├── extensions.md          # 扩展开发 API 参考
+│   ├── provider-guide.md      # Provider 注册与扩展加载用户指南
+│   ├── aone-provider.js       # Aone 开放平台导入扩展示例（完整实战代码）
+│   └── sharing.md             # 项目分享文案
 │
 ├── data/                      # 项目级配置（不含敏感信息）
 │   ├── config.json            # 工具定义 & UI 偏好设置
@@ -279,6 +301,17 @@ skills-manager/
 | GET | `/api/import/subscriptions` | 获取订阅列表 |
 | POST | `/api/import/subscribe` | 订阅来源 |
 | POST | `/api/import/check-all-updates` | 批量检查更新 |
+| GET | `/api/import/providers` | 获取已注册的导入 Provider 列表 |
+| POST | `/api/import/scan/provider/:providerId` | 通用 Provider 扫描端点 |
+| POST | `/api/import/scan/auto-detect` | 自动检测 URL 并匹配 Provider |
+| GET | `/api/import/extensions` | 获取已安装的扩展插件列表 |
+| POST | `/api/import/extensions/upload` | 上传扩展插件（.js 文件） |
+| DELETE | `/api/import/extensions/:name` | 删除扩展插件 |
+| GET | `/api/publish/targets` | 获取所有发布目标 |
+| POST | `/api/publish/:targetId` | 发布 Skill 到指定目标 |
+| GET | `/api/publish/:targetId/status/:publishId` | 查询发布审核状态 |
+| GET | `/api/publish/:targetId/list` | 获取已发布列表 |
+| POST | `/api/import-stream/execute` | SSE 流式导入（实时进度） |
 
 ## 支持的 AI 工具
 

@@ -11,6 +11,9 @@ import toolsRouter from './routes/tools.js';
 import versionsRouter from './routes/versions.js';
 import analyticsRouter from './routes/analytics.js';
 import importRouter from './routes/import.js';
+import publishRouter from './routes/publish.js';
+import importStreamRouter from './routes/import-stream.js';
+import { loadExtensions } from './extensions.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,6 +34,8 @@ app.use('/api/tools', toolsRouter);
 app.use('/api/versions', versionsRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/import', importRouter);
+app.use('/api/publish', publishRouter);
+app.use('/api/import-stream', importStreamRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -56,8 +61,17 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.listen(Number(port), '0.0.0.0', () => {
-  console.log(`Skills Manager API server running at http://127.0.0.1:${port}`);
+// Load extensions (internal providers, publish targets, etc.)
+loadExtensions().then(() => {
+  app.listen(Number(port), '0.0.0.0', () => {
+    console.log(`Skills Manager API server running at http://127.0.0.1:${port}`);
+  });
+}).catch((err) => {
+  console.error('[Extensions] Failed to load extensions:', err);
+  // Start server anyway even if extensions fail
+  app.listen(Number(port), '0.0.0.0', () => {
+    console.log(`Skills Manager API server running at http://127.0.0.1:${port}`);
+  });
 });
 
 export default app;

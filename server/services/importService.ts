@@ -15,6 +15,47 @@ import { syncLinks } from './linkService.js';
 
 const TEMP_DIR = path.join(os.tmpdir(), 'skills-manager-import');
 
+// ==================== Import Provider Registry ====================
+
+export interface ImportProvider {
+  /** 唯一标识符，如 'github', 'internal-git', 'internal-store' */
+  id: string;
+  /** 显示名称 */
+  name: string;
+  /** 图标名称（lucide-react 图标名） */
+  icon: string;
+  /** 分组：'builtin' | 'custom'，用于前端分区展示 */
+  group: 'builtin' | 'custom';
+  /** 是否需要认证 */
+  requiresAuth?: boolean;
+  /** 认证配置字段定义（用于动态生成设置表单） */
+  authFields?: { key: string; label: string; type: 'text' | 'password'; placeholder?: string }[];
+  /** 扫描：解析 URL/输入，返回可导入的 Skills 列表 */
+  scan: (input: string, options?: Record<string, string>) => Promise<{ skills: ScannedSkill[]; repoInfo?: RepoInfo }>;
+  /** URL 匹配：判断一个 URL 是否属于此 Provider */
+  matchUrl?: (url: string) => boolean;
+}
+
+const importProviders: Map<string, ImportProvider> = new Map();
+
+/** 注册一个导入 Provider */
+export function registerImportProvider(provider: ImportProvider): void {
+  importProviders.set(provider.id, provider);
+}
+
+/** 获取所有已注册的 Provider */
+export function getImportProviders(): ImportProvider[] {
+  return Array.from(importProviders.values());
+}
+
+/** 根据 URL 自动匹配 Provider */
+export function detectProvider(url: string): ImportProvider | null {
+  for (const provider of importProviders.values()) {
+    if (provider.matchUrl?.(url)) return provider;
+  }
+  return null;
+}
+
 // ==================== GitHub URL Parsing ====================
 
 interface ParsedGitHubUrl {
@@ -686,6 +727,20 @@ export async function executeImport(
   }
 
   result.duration = Date.now() - startTime;
+
+  // Auto-sync to all bound projects after import (if enabled via options)
+  if (result.successCount > 0 && (options as any).autoSyncAfterImport) {
+    try {
+      const config = await getConfig();
+      if (config.projects.length > 0) {
+        const projectIds = config.projects.map((p: any) => p.id);
+        await syncLinks(projectIds, undefined, 'backup-replace', options.targetSourceDirId);
+      }
+    } catch {
+      // Non-blocking: don't fail the import if auto-sync fails
+    }
+  }
+
   return result;
 }
 
@@ -1412,3 +1467,110 @@ export function detectUrlType(url: string): ImportSource | null {
   if (url.includes('clawhub.ai')) return 'clawhub';
   return null;
 }
+
+// ==================== Register Built-in Providers ====================
+
+registerImportProvider({
+  id: 'github',
+  name: 'GitHub',
+  icon: 'Github',
+  group: 'builtin',
+  requiresAuth: false,
+  authFields: [
+    { key: 'token', label: 'Personal Access Token', type: 'password', placeholder: 'ghp_xxxx (optional, for private repos)' },
+  ],
+  scan: async (url, opts) => {
+    const result = await scanGitHub(url, opts?.branch, opts?.token);
+    return { skills: result.skills, repoInfo: result.repoInfo };
+  },
+  matchUrl: (url) => url.includes('github.com'),
+});
+
+registerImportProvider({
+  id: 'gitee',
+  name: 'Gitee',
+  icon: 'GitBranch',
+  group: 'builtin',
+  requiresAuth: false,
+  authFields: [
+    { key: 'token', label: 'Private Token', type: 'password', placeholder: 'Gitee private token (optional)' },
+  ],
+  scan: async (url, opts) => {
+    const result = await scanGitee(url, opts?.branch, opts?.token);
+    return { skills: result.skills, repoInfo: result.repoInfo };
+  },
+  matchUrl: (url) => url.includes('gitee.com'),
+});
+
+registerImportProvider({
+  id: 'gitlab',
+  name: 'GitLab',
+  icon: 'GitMerge',
+  group: 'builtin',
+  requiresAuth: false,
+  authFields: [
+    { key: 'token', label: 'Private Token', type: 'password', placeholder: 'GitLab private token (optional)' },
+  ],
+  scan: async (url, opts) => {
+    const result = await scanGitLab(url, opts?.branch, opts?.token);
+    return { skills: result.skills, repoInfo: result.repoInfo };
+  },
+  matchUrl: (url) => url.includes('gitlab.'),
+});
+
+registerImportProvider({
+  id: 'bitbucket',
+  name: 'Bitbucket',
+  icon: 'GitBranch',
+  group: 'builtin',
+  scan: async (url, opts) => {
+    const result = await scanBitbucket(url, opts?.branch);
+    return { skills: result.skills, repoInfo: result.repoInfo };
+  },
+  matchUrl: (url) => url.includes('bitbucket.org'),
+});
+
+registerImportProvider({
+  id: 'clawhub',
+  name: 'ClawHub',
+  icon: 'Package',
+  group: 'builtin',
+  scan: async (url) => {
+    const result = await scanClawHub(url);
+    return { skills: result.skills, repoInfo: result.repoInfo };
+  },
+  matchUrl: (url) => url.includes('clawhub.ai'),
+});
+
+registerImportProvider({
+  id: 'local',
+  name: 'Local File/Folder',
+  icon: 'FolderOpen',
+  group: 'builtin',
+  scan: async (sourcePath) => {
+    const result = await scanLocal(sourcePath);
+    return { skills: result.skills };
+  },
+});
+
+registerImportProvider({
+  id: 'zip',
+  name: 'ZIP Archive',
+  icon: 'FileArchive',
+  group: 'builtin',
+  scan: async (zipPath) => {
+    const result = await scanZip(zipPath);
+    return { skills: result.skills };
+  },
+});
+
+registerImportProvider({
+  id: 'clipboard',
+  name: 'Clipboard',
+  icon: 'Clipboard',
+  group: 'builtin',
+  scan: async (content) => {
+    const result = await scanClipboard(content);
+    return { skills: result.skills };
+  },
+});

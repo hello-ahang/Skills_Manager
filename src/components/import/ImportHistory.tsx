@@ -3,16 +3,26 @@ import { useImportStore } from '@/stores/importStore'
 import { importApi } from '@/api/client'
 import { toast } from 'sonner'
 import { History, Trash2, RefreshCw, Loader2, CheckCircle2, XCircle, Bell, BellOff, Tag } from 'lucide-react'
-import type { ImportHistoryItem } from '@/types'
+import type { ImportHistoryItem, ImportProviderInfo } from '@/types'
 
-// Sources that support subscription (git repos + clawhub)
-const subscribableSources = ['github', 'clawhub']
+// Sources that support subscription (git repos + clawhub + extension providers with version support)
+const builtinSubscribableSources = ['github', 'clawhub']
 
 export default function ImportHistory() {
   const { importHistory, setImportHistory } = useImportStore()
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState<string>('')
   const [subscribingId, setSubscribingId] = useState<string | null>(null)
+  const [customProviders, setCustomProviders] = useState<ImportProviderInfo[]>([])
+
+  // Load custom providers to get their display names and determine subscribability
+  useEffect(() => {
+    importApi.getProviders()
+      .then(({ providers }) => {
+        setCustomProviders(providers.filter((p: ImportProviderInfo) => p.group === 'custom'))
+      })
+      .catch(() => {})
+  }, [])
 
   const fetchHistory = async () => {
     setLoading(true)
@@ -86,7 +96,22 @@ export default function ImportHistory() {
     batch: '批量导入',
   }
 
-  const isSubscribable = (source: string) => subscribableSources.includes(source)
+
+  // Build dynamic source labels from custom providers
+  const getSourceLabel = (source: string) => {
+    if (sourceLabels[source]) return sourceLabels[source]
+    const provider = customProviders.find(p => p.id === source)
+    return provider?.name || source
+  }
+
+  // Check if a source supports subscription (builtin + extension providers that return version info)
+  const isSubscribable = (source: string, item?: ImportHistoryItem) => {
+    if (builtinSubscribableSources.includes(source)) return true
+    // Extension providers are subscribable if they have a sourceUrl (meaning they support re-scanning)
+    const provider = customProviders.find(p => p.id === source)
+    if (provider && item?.sourceUrl) return true
+    return false
+  }
 
   return (
     <div className="space-y-4">
@@ -104,6 +129,9 @@ export default function ImportHistory() {
             <option value="">全部来源</option>
             {Object.entries(sourceLabels).map(([key, label]) => (
               <option key={key} value={key}>{label}</option>
+            ))}
+            {customProviders.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
           <button onClick={fetchHistory} className="p-1 hover:bg-muted rounded" title="刷新">
@@ -132,10 +160,10 @@ export default function ImportHistory() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-xs px-1.5 py-0.5 rounded bg-muted font-medium">
-                    {sourceLabels[item.source] || item.source}
+                    {getSourceLabel(item.source)}
                   </span>
-                  {/* Version badge for git/clawhub sources */}
-                  {isSubscribable(item.source) && item.version && (
+                  {/* Version badge — show for any record that has version info */}
+                  {item.version && (
                     <span className="flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono">
                       <Tag className="h-2.5 w-2.5" />
                       {item.version.length > 10 ? item.version.substring(0, 7) : item.version}
@@ -146,8 +174,8 @@ export default function ImportHistory() {
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
-                  {/* Subscribe button for git/clawhub sources */}
-                  {isSubscribable(item.source) && item.sourceUrl && (
+                  {/* Subscribe button for subscribable sources */}
+                  {isSubscribable(item.source, item) && item.sourceUrl && (
                     item.subscribed ? (
                       <span className="flex items-center gap-1 text-xs text-primary px-1.5 py-0.5 rounded bg-primary/5">
                         <Bell className="h-3 w-3" />
