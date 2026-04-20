@@ -211,9 +211,11 @@ skills-manager/
 │   ├── hooks/                 # 自定义 Hooks
 │   └── types/                 # TypeScript 类型定义
 │
-├── docs/                      # 文档
-│   ├── extensions.md          # 扩展开发 API 参考
+├── extensions-guide/           # 扩展开发指南（Git 跟踪）
 │   ├── provider-guide.md      # Provider 注册与扩展加载用户指南
+│   └── extensions.md          # 扩展开发 API 参考
+│
+├── docs/                      # 文档（本地文档，不提交 Git）
 │   ├── aone-provider.js       # Aone 开放平台导入扩展示例（完整实战代码）
 │   └── sharing.md             # 项目分享文案
 │
@@ -270,6 +272,27 @@ skills-manager/
 ### 4. 同步链接
 
 在项目管理页面，为项目绑定 Skills 源目录，系统通过软链接将 Skills 同步到各个项目的 AI 工具配置目录下。
+
+## 扩展开发指南
+
+Skills Manager 提供了轻量级的扩展机制，允许开发者通过编写 `.js` 扩展文件来注册自定义导入源和发布目标，无需修改开源代码。
+
+扩展开发文档位于项目根目录的 `extensions-guide/` 目录下：
+
+| 文档 | 说明 |
+|------|------|
+| [provider-guide.md](extensions-guide/provider-guide.md) | **Provider 注册与扩展加载用户指南** — 完整的扩展开发教程，包含 scan 返回值详解、认证机制、URL 自动检测、完整实战示例等 |
+| [extensions.md](extensions-guide/extensions.md) | **扩展开发 API 参考** — 扩展系统的 API 接口定义和数据结构说明 |
+
+### 快速上手
+
+1. 在 `~/.skills-manager/extensions/` 目录下创建 `.js` 扩展文件
+2. 导出 `setup(context)` 函数，调用 `context.registerImportProvider()` 或 `context.registerPublishTarget()` 注册扩展
+3. 重启 Skills Manager，扩展自动加载生效
+
+也可以在设置页面的"Provider 注册模式"中直接导入 `.js` 扩展文件，无需手动操作文件系统。
+
+详细开发指南请参阅 [extensions-guide/provider-guide.md](extensions-guide/provider-guide.md)。
 
 ## API 文档
 
