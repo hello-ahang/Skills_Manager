@@ -25,6 +25,7 @@ Skills 统一管理平台 — 为同时使用 Claude、Qoder、QoderWork、Openc
 <img width="800" height="447" alt="slide_03" src="https://github.com/user-attachments/assets/bf0a3ff4-5883-41b5-abea-024581701231" />
 <img width="800" height="447" alt="slide_04" src="https://github.com/user-attachments/assets/53804a3e-4a54-44a3-9dd2-3d30818ec2dd" />
 <img width="800" height="447" alt="slide_05" src="https://github.com/user-attachments/assets/49983ad6-b582-414f-bd5a-b438dba3f97b" />
+<img width="800" height="447" alt="d6519d48-ae1f-4180-a6f6-92c51488145a" src="https://github.com/user-attachments/assets/e50ec4ee-4371-49b0-9436-754d8cd2c986" />
 <img width="800" height="447" alt="slide_06" src="https://github.com/user-attachments/assets/b0c88d62-9227-4c5d-b357-335af80c2630" />
 
 ## 核心特性
