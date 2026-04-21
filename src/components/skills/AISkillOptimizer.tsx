@@ -10,16 +10,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Wand2, Loader2, Check, X, Send, File, FilePlus, FileCheck, ArrowLeft } from 'lucide-react'
+import { Wand2, Loader2, Check, X, Send, File, FilePlus, FileCheck, ArrowLeft, Bot } from 'lucide-react'
 import { toast } from 'sonner'
 import { useConfigStore } from '@/stores/configStore'
 import { skillsApi, versionsApi, analyticsApi } from '@/api/client'
@@ -274,11 +267,14 @@ export default function AISkillOptimizer({
   dirPath,
   onSuccess,
 }: AISkillOptimizerProps) {
-  const { llmModels, preferences } = useConfigStore()
-  const testedModels = llmModels.filter(m => m.tested)
+  const { llmModels, defaultModelId, preferences } = useConfigStore()
+
+  // Resolve default model
+  const defaultModel = llmModels.find(m => m.id === defaultModelId && m.tested)
+    || llmModels.find(m => m.tested)
+    || null
 
   const [step, setStep] = useState<Step>('select-model')
-  const [selectedModelId, setSelectedModelId] = useState('')
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -313,8 +309,7 @@ export default function AISkillOptimizer({
 
   // Call AI API via backend proxy to avoid CORS issues
   const callAI = useCallback(async (allMessages: ChatMessage[], files?: { relativePath: string; content: string }[]) => {
-    const selectedModel = llmModels.find(m => m.id === selectedModelId)
-    if (!selectedModel) throw new Error('未找到所选模型')
+    if (!defaultModel) throw new Error('请先在模型配置中设置默认模型')
 
     const actualFiles = files || folderFiles
     const filesContent = actualFiles.map(f => `### 文件：${f.relativePath}\n\`\`\`\n${f.content}\n\`\`\``).join('\n\n')
@@ -324,9 +319,9 @@ export default function AISkillOptimizer({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        baseUrl: selectedModel.baseUrl,
-        apiKey: selectedModel.apiKey,
-        modelName: selectedModel.modelName,
+        baseUrl: defaultModel.baseUrl,
+        apiKey: defaultModel.apiKey,
+        modelName: defaultModel.modelName,
         messages: apiMessages,
         max_tokens: 16384,
       }),
@@ -339,7 +334,7 @@ export default function AISkillOptimizer({
 
     const data = await response.json()
     return data?.choices?.[0]?.message?.content || ''
-  }, [selectedModelId, llmModels, folderFiles, buildApiMessages])
+  }, [defaultModel, folderFiles, buildApiMessages])
 
   // Try to parse optimized files from AI response
   // Accept optional files param to avoid stale closure on folderFiles
@@ -413,8 +408,8 @@ export default function AISkillOptimizer({
 
   // Start optimization: read folder contents and send first message
   const handleStartOptimize = useCallback(async () => {
-    if (!selectedModelId) {
-      toast.warning('请先选择一个模型')
+    if (!defaultModel) {
+      toast.warning('请先在右上角「模型配置」中设置默认模型')
       return
     }
 
@@ -465,7 +460,7 @@ export default function AISkillOptimizer({
     } finally {
       setSending(false)
     }
-  }, [selectedModelId, dirPath, callAI, tryParseOptimizedFiles])
+  }, [defaultModel, dirPath, callAI, tryParseOptimizedFiles])
 
   // Send user message
   const handleSendMessage = useCallback(async () => {
@@ -556,7 +551,6 @@ export default function AISkillOptimizer({
 
   const handleClose = useCallback(() => {
     setStep('select-model')
-    setSelectedModelId('')
     setMessages([])
     setUserInput('')
     setSending(false)
@@ -588,40 +582,19 @@ export default function AISkillOptimizer({
               AI 优化技能
             </DialogTitle>
             <DialogDescription>
-              选择一个模型来优化 <span className="font-medium text-foreground">{folderName}</span> 的所有文件
+              AI 将分析并优化 <span className="font-medium text-foreground">{folderName}</span> 的所有文件
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>选择模型</Label>
-              {testedModels.length > 0 ? (
-                <Select value={selectedModelId} onValueChange={setSelectedModelId}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="请选择已验证的模型" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {testedModels.map(m => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.displayName}
-                        <span className="ml-1.5 text-xs text-muted-foreground">({m.modelName})</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <div className="rounded-md border border-dashed p-3 text-center">
-                  <p className="text-xs text-muted-foreground">
-                    暂无可用模型，请先在右上角「模型配置」中添加并测试通过模型
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
+          {defaultModel && (
+            <p className="text-xs text-muted-foreground py-2">
+              使用模型：<strong>{defaultModel.displayName}</strong>（{defaultModel.modelName}）
+            </p>
+          )}
 
           <DialogFooter>
             <Button variant="outline" onClick={handleClose}>取消</Button>
-            <Button onClick={handleStartOptimize} disabled={!selectedModelId}>
+            <Button onClick={handleStartOptimize} disabled={!defaultModel}>
               <Wand2 className="mr-2 h-4 w-4" />
               开始分析
             </Button>

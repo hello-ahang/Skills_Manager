@@ -13,6 +13,7 @@ import analyticsRouter from './routes/analytics.js';
 import importRouter from './routes/import.js';
 import publishRouter from './routes/publish.js';
 import importStreamRouter from './routes/import-stream.js';
+import radarRouter from './routes/radar.js';
 import { loadExtensions } from './extensions.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -36,6 +37,7 @@ app.use('/api/analytics', analyticsRouter);
 app.use('/api/import', importRouter);
 app.use('/api/publish', publishRouter);
 app.use('/api/import-stream', importStreamRouter);
+app.use('/api/radar', radarRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

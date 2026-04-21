@@ -10,13 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -30,6 +23,7 @@ import {
   FilePlus,
   ArrowLeft,
   FolderPlus,
+  Bot,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useConfigStore } from '@/stores/configStore'
@@ -297,14 +291,17 @@ export default function AISkillGenerator({
   sourceDir,
   onSuccess,
 }: AISkillGeneratorProps) {
-  const { llmModels, preferences } = useConfigStore()
-  const testedModels = llmModels.filter(m => m.tested)
+  const { llmModels, defaultModelId, preferences } = useConfigStore()
+
+  // Resolve default model
+  const defaultModel = llmModels.find(m => m.id === defaultModelId && m.tested)
+    || llmModels.find(m => m.tested)
+    || null
 
   // Step state
   const [step, setStep] = useState<Step>('input')
 
   // Input state
-  const [selectedModelId, setSelectedModelId] = useState('')
   const [idea, setIdea] = useState('')
   const [skillName, setSkillName] = useState('')
 
@@ -338,8 +335,7 @@ export default function AISkillGenerator({
   }, [skillName, idea])
 
   const callAI = useCallback(async (allMessages: ChatMessage[]) => {
-    const selectedModel = llmModels.find(m => m.id === selectedModelId)
-    if (!selectedModel) throw new Error('未找到所选模型')
+    if (!defaultModel) throw new Error('请先在模型配置中设置默认模型')
 
     const apiMessages = buildApiMessages(allMessages)
 
@@ -347,9 +343,9 @@ export default function AISkillGenerator({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        baseUrl: selectedModel.baseUrl,
-        apiKey: selectedModel.apiKey,
-        modelName: selectedModel.modelName,
+        baseUrl: defaultModel.baseUrl,
+        apiKey: defaultModel.apiKey,
+        modelName: defaultModel.modelName,
         messages: apiMessages,
         max_tokens: 16384,
       }),
@@ -362,7 +358,7 @@ export default function AISkillGenerator({
 
     const data = await response.json()
     return data?.choices?.[0]?.message?.content || ''
-  }, [selectedModelId, llmModels, buildApiMessages])
+  }, [defaultModel, buildApiMessages])
 
   // ─── JSON Parsing (multi-strategy) ──────────────────────────────────────
 
@@ -410,8 +406,8 @@ export default function AISkillGenerator({
 
   // Start generation: enter chat mode and send first message
   const handleStartGenerate = useCallback(async () => {
-    if (!selectedModelId) {
-      toast.warning('请先选择一个模型')
+    if (!defaultModel) {
+      toast.warning('请先在右上角「模型配置」中设置默认模型')
       return
     }
     if (!idea.trim()) {
@@ -460,7 +456,7 @@ export default function AISkillGenerator({
     } finally {
       setSending(false)
     }
-  }, [selectedModelId, idea, skillName, callAI, tryParseGeneratedFiles])
+  }, [defaultModel, idea, skillName, callAI, tryParseGeneratedFiles])
 
   // Send user message in chat
   const handleSendMessage = useCallback(async () => {
@@ -567,7 +563,6 @@ export default function AISkillGenerator({
   // Close and reset
   const handleClose = useCallback(() => {
     setStep('input')
-    setSelectedModelId('')
     setIdea('')
     setSkillName('')
     setMessages([])
@@ -607,31 +602,12 @@ export default function AISkillGenerator({
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Model Selection */}
-            <div className="space-y-2">
-              <Label>选择模型</Label>
-              {testedModels.length > 0 ? (
-                <Select value={selectedModelId} onValueChange={setSelectedModelId}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="请选择已验证的模型" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {testedModels.map(m => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.displayName}
-                        <span className="ml-1.5 text-xs text-muted-foreground">({m.modelName})</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <div className="rounded-md border border-dashed p-3 text-center">
-                  <p className="text-xs text-muted-foreground">
-                    暂无可用模型，请先在右上角「模型配置」中添加并测试通过模型
-                  </p>
-                </div>
-              )}
-            </div>
+            {/* Current default model info */}
+            {defaultModel && (
+              <p className="text-xs text-muted-foreground">
+                使用模型：<strong>{defaultModel.displayName}</strong>（{defaultModel.modelName}）
+              </p>
+            )}
 
             {/* Skill Name (optional) */}
             <div className="space-y-2">
@@ -660,7 +636,7 @@ export default function AISkillGenerator({
             <Button variant="outline" onClick={handleClose}>取消</Button>
             <Button
               onClick={handleStartGenerate}
-              disabled={!selectedModelId || !idea.trim()}
+              disabled={!defaultModel || !idea.trim()}
             >
               <Sparkles className="mr-2 h-4 w-4" />
               开始生成

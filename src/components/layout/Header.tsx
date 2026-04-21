@@ -34,7 +34,7 @@ const pageTitles: Record<string, string> = {
 export default function Header() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { preferences, llmModels, setTheme, setUIStyle } = useConfigStore()
+  const { preferences, llmModels, defaultModelId, setTheme, setUIStyle, setDefaultModel } = useConfigStore()
   const title = pageTitles[location.pathname] || 'Skills Manager'
   const isPixel = preferences.uiStyle === 'pixel'
 
@@ -127,13 +127,19 @@ export default function Header() {
   const handleDeleteModel = async (id: string) => {
     const updated = llmModels.filter(m => m.id !== id)
     const oldModels = llmModels
+    const oldDefaultId = defaultModelId
     // Optimistic update
     useConfigStore.setState({ llmModels: updated })
+    // Clear default model if deleted
+    if (defaultModelId === id) {
+      setDefaultModel('')
+    }
     toast.success('模型已删除')
     try {
       await configApi.update({ llmModels: updated })
     } catch {
       useConfigStore.setState({ llmModels: oldModels })
+      if (oldDefaultId === id) setDefaultModel(oldDefaultId)
       toast.error('删除失败，已回滚')
     }
   }
@@ -386,6 +392,29 @@ export default function Header() {
                   </div>
                 )}
               </div>
+
+              {/* Default Model Selection */}
+              {llmModels.filter(m => m.tested).length > 0 && (
+                <div className="space-y-1.5 border-t pt-3">
+                  <Label className="text-xs font-medium">默认使用模型</Label>
+                  <select
+                    value={defaultModelId}
+                    onChange={e => setDefaultModel(e.target.value)}
+                    className="h-8 w-full rounded-md border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="">请选择默认模型</option>
+                    {llmModels.filter(m => m.tested).map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.displayName} ({m.modelName})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-muted-foreground">
+                    设置后，AI 生成技能、AI 优化、Skills 雷达等功能将自动使用此模型
+                  </p>
+                </div>
+              )}
+
               <DialogFooter>
                 <Button
                   variant="outline"

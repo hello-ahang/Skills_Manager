@@ -6,6 +6,7 @@ interface ConfigState {
   sourceDir: string
   sourceDirs: SourceDir[]
   activeSourceDirId: string
+  defaultModelId: string
   llmModels: LLMModel[]
   tools: ToolDefinition[]
   preferences: AppPreferences
@@ -18,11 +19,13 @@ interface ConfigState {
     sourceDir?: string
     sourceDirs?: SourceDir[]
     activeSourceDirId?: string
+    defaultModelId?: string
     llmModels?: LLMModel[]
     tools?: { type: string; enabled: boolean }[]
     preferences?: Partial<AppPreferences>
   }) => Promise<void>
   setActiveSourceDir: (id: string) => Promise<void>
+  setDefaultModel: (id: string) => void
   setTheme: (theme: 'light' | 'dark' | 'system') => void
   setUIStyle: (style: UIStyle) => void
 }
@@ -31,6 +34,7 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
   sourceDir: '',
   sourceDirs: [],
   activeSourceDirId: '',
+  defaultModelId: '',
   llmModels: [],
   tools: [],
   preferences: {
@@ -54,6 +58,7 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
         sourceDir: config.sourceDir,
         sourceDirs: config.sourceDirs || [],
         activeSourceDirId: config.activeSourceDirId || '',
+        defaultModelId: config.defaultModelId || '',
         llmModels: config.llmModels || [],
         tools: config.tools,
         preferences: prefs,
@@ -76,6 +81,7 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
         sourceDir: config.sourceDir,
         sourceDirs: config.sourceDirs || [],
         activeSourceDirId: config.activeSourceDirId || '',
+        defaultModelId: config.defaultModelId || get().defaultModelId,
         llmModels: config.llmModels || [],
         tools: config.tools,
         preferences: { ...get().preferences, ...config.preferences },
@@ -94,6 +100,12 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
       // Save silently
       configApi.update({ activeSourceDirId: id }).catch(() => {})
     }
+  },
+
+  setDefaultModel: (id: string) => {
+    set({ defaultModelId: id })
+    // Save silently
+    configApi.update({ defaultModelId: id }).catch(() => {})
   },
 
   setTheme: (theme) => {

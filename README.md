@@ -18,6 +18,7 @@ Skills 统一管理平台 — 为同时使用 Claude、Qoder、QoderWork、Openc
 | **扩展系统** | Provider 注册模式、文件级扩展加载（`~/.skills-manager/extensions/`）、自定义导入源和发布目标、设置中导入/删除扩展插件，零侵入开源代码 |
 | **发布集成** | 发布 Skills 到云端 AI 平台（悟空等）、内置软链接同步、审核状态追踪、发布历史管理 |
 | **工具同步优化** | 工具特性数据库（生效方式/已知问题）、编辑后生效提示 toast、项目卡片工具标签、导入后自动同步 |
+| **Skills 雷达** | AI 语义搜索（描述场景匹配 Skill）、能力总览（AI 分类统计 + hover 展示详情）、自动标签分类、Skills 全景列表（多 Skills 库聚合 + 版本号展示 + 模糊搜索）、数据本地持久化 |
 | **使用分析** | 事件埋点、仪表盘概览、热门 Skills 排行、最近活动时间线，数据本地存储 |
 <img width="800" height="447" alt="slide_01" src="https://github.com/user-attachments/assets/85d10408-96e0-4c19-9fc8-17d49f960928" />
 <img width="800" height="447" alt="slide_02" src="https://github.com/user-attachments/assets/076550a4-7e75-4a57-b48d-c23f6504bcbd" />
@@ -39,6 +40,7 @@ Skills 统一管理平台 — 为同时使用 Claude、Qoder、QoderWork、Openc
 - **Aone 开放平台集成**：从 Aone 开放平台导入 Skills，支持 `@scope/name` 和无 scope 两种 URL 格式，Cookie 认证
 - **导入历史**：记录每次导入操作，支持按来源过滤，版本号显示，扩展 provider 来源名称动态显示
 - **订阅管理**：订阅 GitHub/ClawHub/扩展 provider 来源的 Skills，支持批量检查更新、版本号追踪、一键更新
+- **Skills 雷达**：AI 语义搜索（描述场景匹配 Skill）、能力总览（AI 自动分类统计 + hover 展示详情）、自动标签分类、Skills 全景列表（多 Skills 库聚合 + 版本号展示 + 模糊搜索）、数据本地持久化（tags/summary 存储在 `~/.skills-manager/`）
 - **使用分析**：轻量级本地分析仪表盘，追踪查看/编辑/AI 优化/导出等操作，热门 Skills 排行、最近活动时间线
 - **Provider 注册模式**：轻量级扩展机制，通过在 `~/.skills-manager/extensions/` 放置 `.js` 扩展文件即可注册自定义导入源和发布目标，无需修改开源代码
 - **扩展插件管理**：设置中支持导入/删除扩展插件（`.js` 文件），无需手动操作文件系统
@@ -341,6 +343,10 @@ Skills Manager 提供了轻量级的扩展机制，允许开发者通过编写 `
 | GET | `/api/publish/:targetId/status/:publishId` | 查询发布审核状态 |
 | GET | `/api/publish/:targetId/list` | 获取已发布列表 |
 | POST | `/api/import-stream/execute` | SSE 流式导入（实时进度） |
+| GET | `/api/radar/skills` | 聚合所有 Skills（Skills 库 + 项目 + 导入历史） |
+| POST | `/api/radar/search` | AI 语义搜索：场景描述匹配 Skills |
+| POST | `/api/radar/summary` | AI 能力总览：分类统计所有 Skills |
+| POST | `/api/radar/tags` | AI 自动标签：批量生成 Skills 分类标签 |
 
 ## 支持的 AI 工具
 

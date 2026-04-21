@@ -137,6 +137,7 @@ export interface AppConfig {
   sourceDir: string; // Legacy compat: equals active source dir path
   sourceDirs: SourceDir[];
   activeSourceDirId: string;
+  defaultModelId?: string; // 默认使用的模型 ID
   llmModels: LLMModel[];
   projects: Project[];
   tools: ToolDefinition[];

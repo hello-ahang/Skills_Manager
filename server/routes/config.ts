@@ -13,6 +13,7 @@ router.get('/', async (_req: Request, res: Response) => {
       sourceDir: config.sourceDir,
       sourceDirs: config.sourceDirs,
       activeSourceDirId: config.activeSourceDirId,
+      defaultModelId: config.defaultModelId || '',
       llmModels: config.llmModels || [],
       tools: config.tools,
       preferences: config.preferences,
@@ -25,12 +26,13 @@ router.get('/', async (_req: Request, res: Response) => {
 // PUT /api/config - Update config
 router.put('/', async (req: Request, res: Response) => {
   try {
-    const { sourceDir, sourceDirs, activeSourceDirId, llmModels, tools, preferences } = req.body;
-    const config = await updateConfig({ sourceDir, sourceDirs, activeSourceDirId, llmModels, tools, preferences });
+    const { sourceDir, sourceDirs, activeSourceDirId, defaultModelId, llmModels, tools, preferences } = req.body;
+    const config = await updateConfig({ sourceDir, sourceDirs, activeSourceDirId, defaultModelId, llmModels, tools, preferences });
     res.json({
       sourceDir: config.sourceDir,
       sourceDirs: config.sourceDirs,
       activeSourceDirId: config.activeSourceDirId,
+      defaultModelId: config.defaultModelId || '',
       llmModels: config.llmModels || [],
       tools: config.tools,
       preferences: config.preferences,

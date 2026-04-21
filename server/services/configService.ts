@@ -18,7 +18,7 @@ const USER_CONFIG_PATH = path.join(USER_CONFIG_DIR, 'user-config.json');
 const PROJECT_FIELDS = ['tools', 'preferences'] as const;
 
 // Fields that belong to user-level config (sensitive / user-specific)
-const USER_FIELDS = ['sourceDir', 'sourceDirs', 'activeSourceDirId', 'llmModels', 'projects', 'dismissedPaths'] as const;
+const USER_FIELDS = ['sourceDir', 'sourceDirs', 'activeSourceDirId', 'defaultModelId', 'llmModels', 'projects', 'dismissedPaths'] as const;
 
 interface ProjectConfig {
   tools: ToolDefinition[];
@@ -29,6 +29,7 @@ interface UserConfig {
   sourceDir: string;
   sourceDirs: SourceDir[];
   activeSourceDirId: string;
+  defaultModelId: string;
   llmModels: LLMModel[];
   projects: any[];
   dismissedPaths: string[];
@@ -95,6 +96,7 @@ const DEFAULT_USER_CONFIG: UserConfig = {
   sourceDir: '',
   sourceDirs: [],
   activeSourceDirId: '',
+  defaultModelId: '',
   llmModels: [],
   projects: [],
   dismissedPaths: [],
@@ -159,6 +161,7 @@ async function migrateToUserConfig(): Promise<void> {
       projects: existingUserConfig.projects?.length > 0 ? existingUserConfig.projects : (projectData.projects || []),
       dismissedPaths: existingUserConfig.dismissedPaths?.length > 0 ? existingUserConfig.dismissedPaths : (projectData.dismissedPaths || []),
       gitTokens: existingUserConfig.gitTokens || { github: '', gitee: '', gitlab: '' },
+      defaultModelId: existingUserConfig.defaultModelId || projectData.defaultModelId || '',
     };
 
     // Save user config
@@ -276,6 +279,7 @@ export async function saveConfig(config: AppConfig): Promise<void> {
     sourceDir: config.sourceDir,
     sourceDirs: config.sourceDirs,
     activeSourceDirId: config.activeSourceDirId,
+    defaultModelId: (config as any).defaultModelId || '',
     llmModels: config.llmModels,
     projects: config.projects,
     dismissedPaths: (config as any).dismissedPaths || [],
@@ -292,11 +296,16 @@ export async function updateConfig(updates: {
   sourceDir?: string;
   sourceDirs?: SourceDir[];
   activeSourceDirId?: string;
+  defaultModelId?: string;
   llmModels?: LLMModel[];
   tools?: { type: string; enabled: boolean }[];
   preferences?: Partial<AppPreferences>;
 }): Promise<AppConfig> {
   const config = await getConfig();
+
+  if (updates.defaultModelId !== undefined) {
+    (config as any).defaultModelId = updates.defaultModelId;
+  }
 
   if (updates.sourceDirs !== undefined) {
     config.sourceDirs = updates.sourceDirs;

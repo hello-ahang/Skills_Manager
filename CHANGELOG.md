@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2026-04-21
+
+### Added
+
+- **Skills 雷达增强**：
+  - 数据范围优化：Skills 全景数据范围改为扫描所有 Skills 库目录（支持多库），不再限于单个活跃库
+  - 版本信息展示：Skills 全景列表从版本索引中读取并展示每个 Skill 的最新版本号
+  - 模糊搜索：Skills 全景新增搜索框，支持按名称、描述、标签进行实时模糊搜索
+  - 能力总览 hover 展示：鼠标悬停在能力总览的分类卡片和技能名称上时，展示完整的 description 信息
+  - 超长文本 hover 提示：Skills 全景表格中被截断的名称和描述，hover 时展示完整内容
+  - 数据本地持久化：tags 和 summary 数据从浏览器 localStorage 迁移到服务端文件存储（`~/.skills-manager/radar-tags.json`、`radar-summary.json`），清除浏览器缓存不会丢失数据
+  - 缓存 API：新增 `GET/PUT /api/radar/cache/tags` 和 `GET/PUT /api/radar/cache/summary` 四个端点
+- **默认模型配置**：
+  - 模型配置弹窗新增"默认使用模型"下拉选择，已测试通过的模型可设为默认
+  - AI 生成技能和 AI 优化技能弹窗中显示当前使用的默认模型信息
+  - 删除模型时自动清除默认选择
+
+### Changed
+
+- **AI 生成/优化技能**：移除弹窗中的"使用模型"选择器，统一使用默认模型，简化操作流程
+- **AI 优化技能文案**：文案从"选择一个模型来优化"改为"AI 将分析并优化"
+- **Skills 全景表格**：从 CSS Grid 布局改为 HTML Table 布局（`table-fixed` + `colgroup` 固定列宽 + `sticky` 表头），解决列错位和边框显示 bug
+- **AI 操作超时**：前端 fetch 调用统一增加 `AbortSignal.timeout` 设置（search: 120s, summary/tags: 180s），后端 summary/tags 超时从 120s 调大到 180s
+
+### Fixed
+
+- **默认模型不持久化**：修复 `configService.ts` 中 `updateConfig` 参数类型缺少 `defaultModelId`、`saveConfig` 构建 `userConfig` 时遗漏 `defaultModelId` 的 bug，导致选择默认模型后重新打开弹窗不显示
+- **Skills 全景列错位**：修复表头和表体使用两个独立 `<table>` 导致列宽无法对齐的 bug
+- **Skills 全景版本不显示**：修复 `scanDirForSkills` 未从版本索引（`~/.skills-manager/versions/index.json`）读取版本号的 bug
+- **Skills 全景列表不全**：修复仅扫描当前活跃 Skills 库（1个）而非所有 Skills 库目录的 bug
+- **Skills 全景滚动失效**：将 `ScrollArea` 组件替换为原生 `overflow-y-auto` 容器，解决与 `<table>` 嵌套导致的滚动失效问题
+- **能力总览超时**：修复前端 fetch 调用无超时设置导致的 `The operation was aborted due to timeout` 错误
+
+---
+
 ## [1.2.0] - 2026-04-20
 
 ### Added
@@ -17,6 +52,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 支持版本号指定（`?version=x.x.x`）
   - 从 SKILL.md 的 `name` 字段读取 Skill 名称
 - **扩展插件 API**：新增 `GET /api/import/extensions`、`POST /api/import/extensions/upload`、`DELETE /api/import/extensions/:name` 三个端点
+- **Skills 雷达**：新增独立页面，聚合 Skills 库 + 项目 + 导入历史的所有 Skills
+  - AI 语义搜索：描述使用场景，AI 匹配最相关的 Skills 并解释推荐理由
+  - 能力总览：AI 自动分析所有 Skills 并按功能领域分类统计
+  - 自动标签分类：AI 为每个 Skill 生成 2-4 个分类标签，支持按标签筛选
+  - Skills 全景列表：表格视图，支持按来源/标签筛选
+- **Skills 雷达 API**：新增 `GET /api/radar/skills`、`POST /api/radar/search`、`POST /api/radar/summary`、`POST /api/radar/tags` 四个端点
 - **导入历史版本号 badge**：所有有版本号的导入记录都显示版本号标签，不再限制为特定来源
 - **Skills 库版本号**：文件树中显示订阅来源的版本号 badge（`v1.0.1` 等）
 - **Header 快捷键提示优化**：导入快捷键按钮文案改为"快速导入"，增加详细的 tooltip 说明

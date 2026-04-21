@@ -8,6 +8,7 @@ import Header from '@/components/layout/Header'
 import ProjectsPage from '@/pages/ProjectsPage'
 import SkillsPage from '@/pages/SkillsPage'
 // ToolsPage removed
+import SkillsRadarPage from '@/pages/SkillsRadarPage'
 import HelpPage from '@/pages/HelpPage'
 import AnalyticsPage from '@/pages/AnalyticsPage'
 import HomePage from '@/pages/HomePage'
@@ -105,6 +106,7 @@ function App() {
               <Route path="/home" element={<HomePage />} />
               <Route path="/projects" element={<ProjectsPage />} />
               <Route path="/skills" element={<SkillsPage />} />
+              <Route path="/radar" element={<SkillsRadarPage />} />
               <Route path="/import" element={<ImportPage />} />
               <Route path="/links" element={<Navigate to="/projects" replace />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
