@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.1] - 2026-04-22
+
+### Added
+
+- **Skills 雷达 Tab 切换**：AI 语义搜索区域新增"Skills 库检索"和"ClawHub 检索"Tab 切换，ClawHub 检索暂置灰预留入口
+- **Skills 雷达文案优化**：副标题文案优化，更清晰地传达功能价值
+
+### Fixed
+
+- **导入过滤模式 Bug**：修复通过 GitHub 导入 Skills 时，选择"仅有效 Skill"过滤模式后，导入按钮显示数量不对、实际导入所有文件的 bug
+  - 切换到"仅有效 Skill"模式时自动取消选中非有效项
+  - 全选/全不选只作用于当前显示列表
+  - 导入执行只导入当前过滤模式下被选中的 Skill
+
+---
+
 ## [1.3.0] - 2026-04-21
 
 ### Added

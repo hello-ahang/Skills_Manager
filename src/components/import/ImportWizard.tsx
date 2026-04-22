@@ -16,7 +16,7 @@ import {
 export default function ImportWizard() {
   const {
     importStep, setImportStep, importSource,
-    scannedSkills, importOptions, setImportOptions,
+    scannedSkills, setScannedSkills, importOptions, setImportOptions,
     setImporting, setImportProgress, setImportResult,
     toggleSkillSelection, selectAllSkills,
     sourceUrl, repoInfo,
@@ -28,8 +28,35 @@ export default function ImportWizard() {
   const validSkills = scannedSkills.filter(s => s.isValid)
   const hasInvalidFolders = scannedSkills.some(s => !s.isValid)
   const displayedSkills = filterMode === 'valid' ? validSkills : scannedSkills
-  const selectedCount = scannedSkills.filter(s => s.selected).length
+  const selectedCount = displayedSkills.filter(s => s.selected).length
   const hasConflicts = scannedSkills.some(s => s.hasConflict && s.selected)
+
+  // 切换过滤模式时，同步选中状态
+  const handleFilterModeChange = (mode: 'valid' | 'all') => {
+    setFilterMode(mode)
+    if (mode === 'valid') {
+      // 切换到"仅有效 Skill"时，取消选中所有非有效项
+      const updated = scannedSkills.map(s => ({
+        ...s,
+        selected: s.isValid ? s.selected : false,
+      }))
+      setScannedSkills(updated)
+    }
+  }
+
+  // 全选/全不选只作用于当前显示列表
+  const handleSelectAll = (selected: boolean) => {
+    if (filterMode === 'all') {
+      selectAllSkills(selected)
+    } else {
+      // 仅有效模式下，只操作有效 Skill 的选中状态
+      const updated = scannedSkills.map(s => ({
+        ...s,
+        selected: s.isValid ? selected : s.selected,
+      }))
+      setScannedSkills(updated)
+    }
+  }
 
   // SSE progress state
   const [progressInfo, setProgressInfo] = useState<{
@@ -37,7 +64,7 @@ export default function ImportWizard() {
   }>({ current: 0, total: 0, skillName: '' })
 
   const handleExecuteImport = async () => {
-    const selectedSkills = scannedSkills.filter(s => s.selected)
+    const selectedSkills = displayedSkills.filter(s => s.selected)
     if (selectedSkills.length === 0) {
       toast.error('请至少选择一个 Skill')
       return
@@ -107,7 +134,7 @@ export default function ImportWizard() {
               {hasInvalidFolders && (
                 <div className="flex gap-0.5 rounded-md border bg-muted/30 p-0.5">
                   <button
-                    onClick={() => setFilterMode('valid')}
+                    onClick={() => handleFilterModeChange('valid')}
                     className={`rounded px-2 py-0.5 text-xs transition-colors ${
                       filterMode === 'valid'
                         ? 'bg-background text-foreground shadow-sm font-medium'
@@ -117,7 +144,7 @@ export default function ImportWizard() {
                     仅有效 Skill
                   </button>
                   <button
-                    onClick={() => setFilterMode('all')}
+                    onClick={() => handleFilterModeChange('all')}
                     className={`rounded px-2 py-0.5 text-xs transition-colors ${
                       filterMode === 'all'
                         ? 'bg-background text-foreground shadow-sm font-medium'
@@ -129,13 +156,13 @@ export default function ImportWizard() {
                 </div>
               )}
               <button
-                onClick={() => selectAllSkills(true)}
+                onClick={() => handleSelectAll(true)}
                 className="text-xs text-primary hover:underline"
               >
                 全选
               </button>
               <button
-                onClick={() => selectAllSkills(false)}
+                onClick={() => handleSelectAll(false)}
                 className="text-xs text-muted-foreground hover:underline"
               >
                 全不选
