@@ -19,6 +19,7 @@ Skills 统一管理平台 — 为同时使用 Claude、Qoder、QoderWork、Openc
 | **发布集成** | 发布 Skills 到云端 AI 平台（悟空等）、内置软链接同步、审核状态追踪、发布历史管理 |
 | **工具同步优化** | 工具特性数据库（生效方式/已知问题）、编辑后生效提示 toast、项目卡片工具标签、导入后自动同步 |
 | **Skills 雷达** | AI 语义搜索（描述场景匹配 Skill）、能力总览（AI 分类统计 + hover 展示详情）、自动标签分类、Skills 全景列表（多 Skills 库聚合 + 版本号展示 + 模糊搜索）、数据本地持久化 |
+| **Skills 工程化** ⭐ v1.4.0 | Lint 静态检测（13 条规则覆盖 description / 结构 / 安全 / 一致性）、健康度评分（A-F 等级 + 0-100 分）、AI description 质量评估（按需）、**Skills 测试沙箱**（手动/AI 自动生成场景 → 模拟触发决策 → 触发率+匹配度双指标 → 历史回看，可搜索下拉支持 name·description 展示）、软依赖管理（YAML `related` 字段）、场景智能搜索 |
 | **使用分析** | 事件埋点、仪表盘概览、热门 Skills 排行、最近活动时间线，数据本地存储 |
 <img width="800" height="447" alt="slide_01" src="https://github.com/user-attachments/assets/85d10408-96e0-4c19-9fc8-17d49f960928" />
 <img width="800" height="447" alt="slide_02" src="https://github.com/user-attachments/assets/076550a4-7e75-4a57-b48d-c23f6504bcbd" />
@@ -42,6 +43,16 @@ Skills 统一管理平台 — 为同时使用 Claude、Qoder、QoderWork、Openc
 - **导入历史**：记录每次导入操作，支持按来源过滤，版本号显示，扩展 provider 来源名称动态显示
 - **订阅管理**：订阅 GitHub/ClawHub/扩展 provider 来源的 Skills，支持批量检查更新、版本号追踪、一键更新
 - **Skills 雷达**：AI 语义搜索（描述场景匹配 Skill）、能力总览（AI 自动分类统计 + hover 展示详情）、自动标签分类、Skills 全景列表（多 Skills 库聚合 + 版本号展示 + 模糊搜索）、数据本地持久化（tags/summary 存储在 `~/.skills-manager/`）
+- **Skills 工程化平台**（v1.4.0 新增）：
+  - **Lint 静态检测 + 健康度评分**：13 条规则覆盖 description 质量 / SKILL.md 结构 / 安全检测（API Key/密码/内网 URL）/ 一致性，输出 0-100 分 + A/B/C/D/F 等级，文件树彩色徽章直观展示
+  - **AI description 评估**：按需调用 LLM 评估 description 质量并给出改进建议（避免无效 token 消耗）
+  - **Skills 测试沙箱**：模拟 AI 触发决策，给定测试场景验证 Skill 触发准确率（Top 3 命中）+ description 匹配度，AI 自动生成测试场景，历史持久化（`~/.skills-manager/sandbox-history.json`）
+  - **软依赖管理**：在 SKILL.md frontmatter 中声明 Skill 之间的"推荐搭配"关联关系（纯软引用，不做版本约束）
+    - **使用方法**：在 `SKILL.md` 顶部 frontmatter 添加 `related` 字段，例如 `related: [skill-a, skill-b]`（也支持多行 `- item` 写法）
+    - **文件树徽章**：声明了 related 的 Skill 旁会出现青色"N 相关"徽章，hover 查看完整关联列表，点击可一键跳转到对应 Skill
+    - **容错提示**：引用的 Skill 在当前 Skills 库中不存在时，会灰显并标注"未找到"，避免误导
+    - **使用场景**：帮助管理大量 Skills 时快速发现哪些经常搭配使用（如"代码审查"与"提交规范"）
+  - **场景智能搜索**：基于自然语言描述使用场景，AI 语义匹配最合适的 Skills（位于雷达页"AI 智能检索"区域）
 - **使用分析**：轻量级本地分析仪表盘，追踪查看/编辑/AI 优化/导出等操作，热门 Skills 排行、最近活动时间线
 - **Provider 注册模式**：轻量级扩展机制，通过在 `~/.skills-manager/extensions/` 放置 `.js` 扩展文件即可注册自定义导入源和发布目标，无需修改开源代码
 - **扩展插件管理**：设置中支持导入/删除扩展插件（`.js` 文件），无需手动操作文件系统

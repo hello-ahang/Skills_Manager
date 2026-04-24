@@ -4,6 +4,7 @@ import os from 'os';
 import { getConfig } from './configService.js';
 import { getHistory } from './importHistoryService.js';
 import type { SkillVersion } from '../../src/types/index.js';
+import { parseYamlField } from '../utils/yamlUtils.js';
 
 const USER_CONFIG_DIR = path.join(os.homedir(), '.skills-manager');
 
@@ -38,8 +39,7 @@ function parseSkillFrontmatter(content: string): { name?: string; description?: 
     const result: { name?: string; description?: string } = {};
     const nameMatch = frontmatter.match(/^name:\s*(.+)$/m);
     if (nameMatch) result.name = nameMatch[1].trim().replace(/^['"]|['"]$/g, '');
-    const descMatch = frontmatter.match(/^description:\s*(.+)$/m);
-    if (descMatch) result.description = descMatch[1].trim().replace(/^['"]|['"]$/g, '');
+    result.description = parseYamlField(frontmatter, 'description');
     return (result.name || result.description) ? result : null;
   }
 
@@ -47,9 +47,11 @@ function parseSkillFrontmatter(content: string): { name?: string; description?: 
   const result: { name?: string; description?: string } = {};
   const nameMatch = content.match(/^name:\s*(.+)$/m);
   if (nameMatch) result.name = nameMatch[1].trim();
-  const descMatch = content.match(/^description:\s*(.+)$/m)
-    || content.match(/^>\s*(.+)$/m);
-  if (descMatch) result.description = descMatch[1].trim();
+  result.description = parseYamlField(content, 'description');
+  if (!result.description) {
+    const fallbackMatch = content.match(/^>\s*(.+)$/m);
+    if (fallbackMatch) result.description = fallbackMatch[1].trim();
+  }
   return (result.name || result.description) ? result : null;
 }
 

@@ -7,13 +7,14 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Sparkles, Search, Settings2, Plus, Trash2, Pencil } from 'lucide-react'
-import FileTree from '@/components/skills/FileTree'
+import { FolderCheck, Search, Settings2, Plus, Trash2, Pencil, ShieldCheck, Loader2, Sparkles } from 'lucide-react'
+import FileTree, { type SkillHealthSummary } from '@/components/skills/FileTree'
 import SkillEditor from '@/components/skills/Editor'
 import AISkillGenerator from '@/components/skills/AISkillGenerator'
 import AISkillOptimizer from '@/components/skills/AISkillOptimizer'
 import VersionHistoryDialog from '@/components/skills/VersionHistoryDialog'
 import SearchResults from '@/components/skills/SearchResults'
+import SkillHealthDialog, { type SkillHealthReport } from '@/components/skills/SkillHealthDialog'
 import {
   Dialog,
   DialogContent,
@@ -58,7 +59,7 @@ function SourceDirStats({ tree }: { tree: FileTreeNode[] }) {
         📁 {dirCount} 个文件夹
       </span>
       <span className="flex items-center gap-1">
-        <Sparkles className="h-3 w-3 text-amber-500" />
+        <FolderCheck className="h-3 w-3 text-amber-500" />
         {validSkillCount} 个有效 Skill
       </span>
     </div>
@@ -91,7 +92,7 @@ export default function SkillsPage() {
     refreshTree,
   } = useSkills()
 
-  const { sourceDirs, activeSourceDirId, updateConfig, setActiveSourceDir } = useConfigStore()
+  const { sourceDirs, activeSourceDirId, updateConfig, setActiveSourceDir, llmModels, defaultModelId } = useConfigStore()
 
   const [showAIGenerate, setShowAIGenerate] = useState(false)
   const [optimizeDirPath, setOptimizeDirPath] = useState('')
@@ -127,6 +128,129 @@ export default function SkillsPage() {
     setVersionSkillName(dirName)
     setShowVersionHistory(true)
   }
+
+  // 健康度（Lint）— localStorage 持久化
+  const HEALTH_CACHE_KEY = 'skill-health-cache'
+  const [healthMap, setHealthMap] = useState<Record<string, SkillHealthSummary>>(() => {
+    try {
+      const cached = localStorage.getItem(HEALTH_CACHE_KEY)
+      return cached ? JSON.parse(cached).map || {} : {}
+    } catch { return {} }
+  })
+  const [healthReports, setHealthReports] = useState<Record<string, SkillHealthReport>>(() => {
+    try {
+      const cached = localStorage.getItem(HEALTH_CACHE_KEY)
+      return cached ? JSON.parse(cached).reports || {} : {}
+    } catch { return {} }
+  })
+  const [healthLoading, setHealthLoading] = useState(false)
+  const [healthDialogOpen, setHealthDialogOpen] = useState(false)
+  const [activeHealthReport, setActiveHealthReport] = useState<SkillHealthReport | null>(null)
+  const [activeHealthDesc, setActiveHealthDesc] = useState<string | undefined>(undefined)
+
+  const [batchHealthDialogOpen, setBatchHealthDialogOpen] = useState(false)
+  const [batchIncludeAi, setBatchIncludeAi] = useState(false)
+
+  const handleBatchHealthCheck = useCallback(async (includeAiAssess: boolean) => {
+    setBatchHealthDialogOpen(false)
+    setHealthLoading(true)
+    try {
+      // Build request body
+      const body: Record<string, unknown> = {}
+      if (includeAiAssess) {
+        const model = llmModels.find(m => m.id === defaultModelId) || llmModels[0]
+        if (!model) {
+          toast.error('请先在配置中添加并选择默认模型')
+          setHealthLoading(false)
+          return
+        }
+        body.includeAiAssess = true
+        body.baseUrl = model.baseUrl
+        body.apiKey = model.apiKey
+        body.modelName = model.modelName
+      }
+      const resp = await fetch('/api/skill-lint/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        throw new Error(err.error || `HTTP ${resp.status}`)
+      }
+      const data = await resp.json()
+      const reports: SkillHealthReport[] = data.reports || []
+      const newMap: Record<string, SkillHealthSummary> = {}
+      const newReports: Record<string, SkillHealthReport> = {}
+      for (const r of reports) {
+        newMap[r.skillPath] = { score: r.score, grade: r.grade, issuesCount: r.issues.length }
+        newReports[r.skillPath] = r
+      }
+      setHealthMap(newMap)
+      setHealthReports(newReports)
+      // Persist to localStorage
+      try { localStorage.setItem(HEALTH_CACHE_KEY, JSON.stringify({ map: newMap, reports: newReports })) } catch { /* ignore quota errors */ }
+      const aiSuffix = includeAiAssess ? '（含 AI 评估）' : ''
+      toast.success(`健康度检测完成${aiSuffix}：共检测 ${reports.length} 个 Skill`)
+    } catch (e) {
+      toast.error(`健康度检测失败：${e instanceof Error ? e.message : '未知错误'}`)
+    } finally {
+      setHealthLoading(false)
+    }
+  }, [llmModels, defaultModelId])
+
+  const handleShowHealth = useCallback(async (dirPath: string) => {
+    let report = healthReports[dirPath]
+    if (!report) {
+      // 单个 Skill 即时检测
+      try {
+        const resp = await fetch('/api/skill-lint/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ skillPath: dirPath }),
+        })
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}))
+          throw new Error(err.error || `HTTP ${resp.status}`)
+        }
+        const data = await resp.json()
+        report = data.report
+        setHealthReports(prev => {
+          const updated = { ...prev, [dirPath]: report }
+          try {
+            const cached = JSON.parse(localStorage.getItem(HEALTH_CACHE_KEY) || '{}')
+            localStorage.setItem(HEALTH_CACHE_KEY, JSON.stringify({ ...cached, reports: updated }))
+          } catch { /* ignore */ }
+          return updated
+        })
+        setHealthMap(prev => {
+          const updated = { ...prev, [dirPath]: { score: report.score, grade: report.grade, issuesCount: report.issues.length } }
+          try {
+            const cached = JSON.parse(localStorage.getItem(HEALTH_CACHE_KEY) || '{}')
+            localStorage.setItem(HEALTH_CACHE_KEY, JSON.stringify({ ...cached, map: updated }))
+          } catch { /* ignore */ }
+          return updated
+        })
+      } catch (e) {
+        toast.error(`检测失败：${e instanceof Error ? e.message : '未知错误'}`)
+        return
+      }
+    }
+    // 找到对应 Skill 的 description（用于 AI 评估）
+    const findDesc = (nodes: FileTreeNode[]): string | undefined => {
+      for (const n of nodes) {
+        if (n.path === dirPath) return n.description
+        if (n.children) {
+          const r = findDesc(n.children)
+          if (r) return r
+        }
+      }
+      return undefined
+    }
+    setActiveHealthDesc(findDesc(tree))
+    setActiveHealthReport(report)
+    setHealthDialogOpen(true)
+  }, [healthReports, tree])
 
   // 别名功能
   const { skillAliases, setSkillAlias, removeSkillAlias } = useSkillsStore()
@@ -321,123 +445,113 @@ export default function SkillsPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-9.5rem)] gap-0 -m-6">
+    <div data-page="skills" className="flex h-full">
       {/* Left Panel: File Tree & Search */}
-      <div className="flex w-80 flex-col border-r">
-        {/* Source Dir Selector */}
-        <div className="border-b px-3 py-2 space-y-1.5">
-          <div className="flex items-center gap-1">
-            {sourceDirs.length > 0 ? (
-              <Select value={activeSourceDirId} onValueChange={handleSwitchSourceDir}>
-                <SelectTrigger className="h-7 flex-1 min-w-0 text-xs">
-                  <SelectValue placeholder="选择源目录" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sourceDirs.map(sd => (
-                    <SelectItem key={sd.id} value={sd.id} className="text-xs">
-                      {sd.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <span className="flex-1 text-xs text-muted-foreground">未配置源目录</span>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2 text-xs shrink-0"
-              onClick={() => setShowSourceManage(true)}
-            >
-              <Settings2 className="mr-1 h-3 w-3" />
-              管理
-            </Button>
-          </div>
-          {/* Source Dir Stats */}
-          {tree.length > 0 && (
-            <SourceDirStats tree={tree} />
-          )}
-        </div>
-
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
-          <div className="border-b px-2 pt-2">
-            <TabsList className="w-full">
-              <TabsTrigger value="files" className="flex-1 text-xs">文件</TabsTrigger>
-              <TabsTrigger value="search" className="flex-1 text-xs">搜索</TabsTrigger>
-            </TabsList>
-          </div>
-
-          <TabsContent value="files" className="flex-1 flex flex-col mt-0 overflow-hidden min-h-0">
-            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-              <div className="p-2">
-                <FileTree
-                  nodes={tree}
-                  selectedFile={selectedFile}
-                  onSelectFile={selectFile}
-                  onDeleteFile={deleteFile}
-                  onDeleteDir={handleDeleteDir}
-                  onCreateFile={handleCreateInDir}
-                  onCreateDir={handleCreateDirInDir}
-                  onRename={handleRenameStart}
-                  onAIOptimize={(dirPath) => {
-                    setOptimizeDirPath(dirPath)
-                    setShowAIOptimize(true)
-                  }}
-                  onExport={async (dirPath) => {
-                    try {
-                      const folderName = dirPath.split('/').pop() || 'skill'
-                      const response = await fetch('/api/tools/export', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ paths: [dirPath] }),
-                      })
-                      if (!response.ok) throw new Error('导出失败')
-                      const blob = await response.blob()
-                      const url = URL.createObjectURL(blob)
-                      const a = document.createElement('a')
-                      a.href = url
-                      a.download = `${folderName}.zip`
-                      a.click()
-                      URL.revokeObjectURL(url)
-                      toast.success(`已导出 ${folderName}`)
-                    } catch {
-                      toast.error('导出失败')
-                    }
-                  }}
-                  skillAliases={skillAliases}
-                  onSetAlias={handleSetAlias}
-                  onRemoveAlias={handleRemoveAlias}
-                  onVersionHistory={handleVersionHistory}
-                />
-              </div>
-            </div>
-            <Separator />
-            <div className="shrink-0 p-2">
+      <div className="w-96 border-r h-full flex flex-col overflow-hidden">
+        {/* Scrollable content area */}
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">          {/* Source Dir Selector */}
+          <div className="border-b px-3 py-2 space-y-1.5 sticky top-0 bg-background z-10">
+            <div className="flex items-center gap-1">
+              {sourceDirs.length > 0 ? (
+                <Select value={activeSourceDirId} onValueChange={handleSwitchSourceDir}>
+                  <SelectTrigger className="h-7 flex-1 min-w-0 text-xs">
+                    <SelectValue placeholder="选择源目录" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sourceDirs.map(sd => (
+                      <SelectItem key={sd.id} value={sd.id} className="text-xs">
+                        {sd.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <span className="flex-1 text-xs text-muted-foreground">未配置源目录</span>
+              )}
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full justify-center text-xs gap-1.5 border-dashed border-amber-300 text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950"
-                onClick={() => setShowAIGenerate(true)}
+                className="h-7 px-2 text-xs shrink-0"
+                onClick={() => setShowSourceManage(true)}
               >
-                <Sparkles className="h-3.5 w-3.5" />
-                AI 生成技能
+                <Settings2 className="mr-1 h-3 w-3" />
+                管理
               </Button>
             </div>
-          </TabsContent>
+            {/* Source Dir Stats */}
+            {tree.length > 0 && (
+              <SourceDirStats tree={tree} />
+            )}
+          </div>
 
-          <TabsContent value="search" className="flex-1 flex flex-col mt-0 overflow-hidden min-h-0">
+          {/* Tab bar — sticky below source dir */}
+          <div className="border-b px-2 pt-2 sticky top-[3.5rem] bg-background z-10">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="w-full">
+                <TabsTrigger value="files" className="flex-1 text-xs">文件</TabsTrigger>
+                <TabsTrigger value="search" className="flex-1 text-xs">搜索</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
+          {/* Tab content */}
+          {activeTab === 'files' ? (
             <div className="p-2">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="搜索 Skills 内容..."
-                  value={searchQuery}
-                  onChange={(e) => searchFiles(e.target.value)}
-                  className="pl-8 h-8 text-xs"
-                />
-              </div>
+              <FileTree
+                nodes={tree}
+                selectedFile={selectedFile}
+                onSelectFile={selectFile}
+                onDeleteFile={deleteFile}
+                onDeleteDir={handleDeleteDir}
+                onCreateFile={handleCreateInDir}
+                onCreateDir={handleCreateDirInDir}
+                onRename={handleRenameStart}
+                onAIOptimize={(dirPath) => {
+                  setOptimizeDirPath(dirPath)
+                  setShowAIOptimize(true)
+                }}
+                onExport={async (dirPath) => {
+                  try {
+                    const folderName = dirPath.split('/').pop() || 'skill'
+                    const response = await fetch('/api/tools/export', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ paths: [dirPath] }),
+                    })
+                    if (!response.ok) throw new Error('导出失败')
+                    const blob = await response.blob()
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `${folderName}.zip`
+                    a.click()
+                    URL.revokeObjectURL(url)
+                    toast.success(`已导出 ${folderName}`)
+                  } catch {
+                    toast.error('导出失败')
+                  }
+                }}
+                skillAliases={skillAliases}
+                onSetAlias={handleSetAlias}
+                onRemoveAlias={handleRemoveAlias}
+                onVersionHistory={handleVersionHistory}
+                healthMap={healthMap}
+                onShowHealth={handleShowHealth}
+              />
             </div>
-            <div className="flex-1 min-h-0 overflow-y-auto">
+          ) : (
+            <div>
+              <div className="p-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="搜索 Skills 内容..."
+                    value={searchQuery}
+                    onChange={(e) => searchFiles(e.target.value)}
+                    className="pl-8 h-8 text-xs"
+                  />
+                </div>
+              </div>
               <div className="p-2">
                 {searchQuery ? (
                   <SearchResults results={searchResults} onSelectFile={selectFile} />
@@ -448,8 +562,41 @@ export default function SkillsPage() {
                 )}
               </div>
             </div>
-          </TabsContent>
-        </Tabs>
+          )}
+        </div>
+
+        {/* Bottom action buttons — always at bottom */}
+        <div className="shrink-0 border-t bg-background p-2 space-y-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-center text-xs gap-1.5 border-dashed border-emerald-300 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950"
+            onClick={() => setBatchHealthDialogOpen(true)}
+            disabled={healthLoading}
+            title="对所有 Skill 进行静态规则检测，可选 AI 评估"
+          >
+            {healthLoading ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                检测中{batchIncludeAi ? '（含 AI 评估，可能需数分钟）' : '...'}
+              </>
+            ) : (
+              <>
+                <ShieldCheck className="h-3.5 w-3.5" />
+                批量健康度检测
+              </>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-center text-xs gap-1.5 border-dashed border-amber-300 text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950"
+            onClick={() => setShowAIGenerate(true)}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            AI 生成技能
+          </Button>
+        </div>
       </div>
 
       {/* Right Panel: Editor */}
@@ -477,6 +624,54 @@ export default function SkillsPage() {
           />
         )}
       </div>
+
+      {/* Batch Health Check Confirm Dialog */}
+      <Dialog open={batchHealthDialogOpen} onOpenChange={setBatchHealthDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-emerald-500" />
+              批量健康度检测
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              对所有有效 Skill 进行静态规则检测（13 条规则），生成健康度评分（A-F 等级）。
+            </p>
+            <label className="flex items-start gap-2.5 cursor-pointer rounded-lg border p-3 hover:bg-muted/50 transition-colors">
+              <input
+                type="checkbox"
+                checked={batchIncludeAi}
+                onChange={e => setBatchIncludeAi(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0"
+              />
+              <div className="space-y-1">
+                <span className="text-sm font-medium">同时进行 AI 评估 description 质量</span>
+                <span className="block text-xs text-muted-foreground">
+                  使用默认模型对每个 Skill 的 description 进行语义质量打分和改进建议（消耗 token，更耗时）
+                </span>
+              </div>
+            </label>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setBatchHealthDialogOpen(false)}>
+              取消
+            </Button>
+            <Button size="sm" onClick={() => handleBatchHealthCheck(batchIncludeAi)}>
+              <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
+              开始检测
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Skill Health Report Dialog */}
+      <SkillHealthDialog
+        open={healthDialogOpen}
+        onOpenChange={setHealthDialogOpen}
+        report={activeHealthReport}
+        description={activeHealthDesc}
+      />
 
       {/* New File Dialog */}
       <Dialog open={showNewFile} onOpenChange={setShowNewFile}>

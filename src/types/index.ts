@@ -60,6 +60,8 @@ export interface FileTreeNode {
   description?: string;
   isValidSkill?: boolean;
   version?: string;
+  /** 软依赖：相关 Skill 名称列表（来自 frontmatter 的 related 字段） */
+  relatedSkills?: string[];
 }
 
 // ==================== Link Management ====================

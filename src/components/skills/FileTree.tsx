@@ -1,7 +1,8 @@
 import { useState, useCallback, useMemo } from 'react'
 import { FileTreeNode } from '@/types'
 import { cn } from '@/lib/utils'
-import { ChevronRight, ChevronDown, File, Folder, FolderOpen, Trash2, Plus, ChevronsUpDown, ChevronsDownUp, FilePlus, FolderPlus, Pencil, MoreHorizontal, Sparkles, Wand2, Download, Tag, X, History, Send } from 'lucide-react'
+import { ChevronRight, ChevronDown, File, Folder, FolderOpen, FolderCheck, FolderOpenDot, Trash2, Plus, ChevronsUpDown, ChevronsDownUp, FilePlus, FolderPlus, Pencil, MoreHorizontal, Wand2, Download, Tag, X, History, Send } from 'lucide-react'
+import RelatedSkillsBadge from '@/components/skills/RelatedSkillsBadge'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -21,6 +22,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
+export interface SkillHealthSummary {
+  score: number
+  grade: 'A' | 'B' | 'C' | 'D' | 'F'
+  issuesCount: number
+}
+
 interface FileTreeProps {
   nodes: FileTreeNode[]
   selectedFile: string | null
@@ -37,6 +44,12 @@ interface FileTreeProps {
   onRemoveAlias?: (dirPath: string) => void
   onVersionHistory?: (dirPath: string, dirName: string) => void
   onPublishTo?: (dirPath: string, dirName: string) => void
+  /** Skill 路径 -> 健康度摘要，用于在 Skill 目录节点旁展示徽章 */
+  healthMap?: Record<string, SkillHealthSummary>
+  /** 点击健康度徽章时触发，传入 Skill 目录路径 */
+  onShowHealth?: (dirPath: string) => void
+  /** 点击相关 Skill 跳转回调 */
+  onJumpRelated?: (skillName: string) => void
 }
 
 interface TreeNodeProps {
@@ -48,6 +61,10 @@ interface TreeNodeProps {
   onSelectFile: (path: string) => void
   onDeleteFile: (path: string) => void
   onDeleteDir?: (dirPath: string) => void
+  healthMap?: Record<string, SkillHealthSummary>
+  onShowHealth?: (dirPath: string) => void
+  onJumpRelated?: (skillName: string) => void
+  knownSkillNames?: Set<string>
   onCreateFile?: (dirPath: string) => void
   onCreateDir?: (dirPath: string) => void
   onRename?: (path: string, currentName: string) => void
@@ -60,7 +77,7 @@ interface TreeNodeProps {
   onPublishTo?: (dirPath: string, dirName: string) => void
 }
 
-function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, onSelectFile, onDeleteFile, onDeleteDir, onCreateFile, onCreateDir, onRename, onAIOptimize, onExport, skillAliases, onSetAlias, onRemoveAlias, onVersionHistory, onPublishTo }: TreeNodeProps) {
+function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, onSelectFile, onDeleteFile, onDeleteDir, onCreateFile, onCreateDir, onRename, onAIOptimize, onExport, skillAliases, onSetAlias, onRemoveAlias, onVersionHistory, onPublishTo, healthMap, onShowHealth, onJumpRelated, knownSkillNames }: TreeNodeProps) {
   const isSelected = node.path === selectedFile
   const isDirectory = node.type === 'directory'
   const expanded = expandedPaths.has(node.path)
@@ -90,10 +107,18 @@ function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, on
             ) : (
               <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             )}
-            {expanded ? (
-              <FolderOpen className="h-4 w-4 shrink-0 text-blue-500" />
+            {node.isValidSkill ? (
+              expanded ? (
+                <FolderOpenDot className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" />
+              ) : (
+                <FolderCheck className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" />
+              )
             ) : (
-              <Folder className="h-4 w-4 shrink-0 text-blue-500" />
+              expanded ? (
+                <FolderOpen className="h-4 w-4 shrink-0 text-blue-500" />
+              ) : (
+                <Folder className="h-4 w-4 shrink-0 text-blue-500" />
+              )
             )}
           </>
         ) : (
@@ -130,9 +155,35 @@ function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, on
             </span>
           )}
         </div>
-        {isDirectory && node.isValidSkill && (
-          <Sparkles className="h-3 w-3 shrink-0 text-amber-500 dark:text-amber-400" />
+        {isDirectory && node.isValidSkill && depth === 0 && node.relatedSkills && node.relatedSkills.length > 0 && (
+          <RelatedSkillsBadge
+            related={node.relatedSkills}
+            knownSkillNames={knownSkillNames}
+            onJump={onJumpRelated}
+          />
         )}
+        {isDirectory && node.isValidSkill && depth === 0 && healthMap?.[node.path] && onShowHealth && (() => {
+          const h = healthMap[node.path]
+          const colorMap: Record<string, string> = {
+            A: 'text-green-700 bg-green-100 hover:bg-green-200 dark:text-green-300 dark:bg-green-950/50',
+            B: 'text-blue-700 bg-blue-100 hover:bg-blue-200 dark:text-blue-300 dark:bg-blue-950/50',
+            C: 'text-yellow-700 bg-yellow-100 hover:bg-yellow-200 dark:text-yellow-300 dark:bg-yellow-950/50',
+            D: 'text-orange-700 bg-orange-100 hover:bg-orange-200 dark:text-orange-300 dark:bg-orange-950/50',
+            F: 'text-red-700 bg-red-100 hover:bg-red-200 dark:text-red-300 dark:bg-red-950/50',
+          }
+          return (
+            <button
+              className={cn(
+                'inline-flex items-center gap-0.5 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold cursor-pointer transition-colors',
+                colorMap[h.grade] || colorMap.C,
+              )}
+              title={`健康度 ${h.score}/100，${h.issuesCount} 个问题`}
+              onClick={(e) => { e.stopPropagation(); onShowHealth(node.path) }}
+            >
+              {h.grade} {h.score}
+            </button>
+          )
+        })()}
         {isDirectory && node.isValidSkill && depth === 0 && onAIOptimize && (
           <button
             className="inline-flex items-center gap-1 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-purple-700 bg-purple-100 hover:bg-purple-200 dark:text-purple-300 dark:bg-purple-950/50 dark:hover:bg-purple-900/60 cursor-pointer transition-colors"
@@ -266,6 +317,10 @@ function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, on
               onRemoveAlias={onRemoveAlias}
               onVersionHistory={onVersionHistory}
               onPublishTo={onPublishTo}
+              healthMap={healthMap}
+              onShowHealth={onShowHealth}
+              onJumpRelated={onJumpRelated}
+              knownSkillNames={knownSkillNames}
             />
           ))}
         </div>
@@ -302,10 +357,21 @@ function collectDefaultExpanded(nodes: FileTreeNode[], depth = 0): string[] {
   return paths
 }
 
-export default function FileTree({ nodes, selectedFile, onSelectFile, onDeleteFile, onDeleteDir, onCreateFile, onCreateDir, onRename, onAIOptimize, onExport, skillAliases, onSetAlias, onRemoveAlias, onVersionHistory, onPublishTo }: FileTreeProps) {
+export default function FileTree({ nodes, selectedFile, onSelectFile, onDeleteFile, onDeleteDir, onCreateFile, onCreateDir, onRename, onAIOptimize, onExport, skillAliases, onSetAlias, onRemoveAlias, onVersionHistory, onPublishTo, healthMap, onShowHealth, onJumpRelated }: FileTreeProps) {
   // Default: all directories collapsed
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const allDirPaths = useMemo(() => collectDirPaths(nodes), [nodes])
+
+  // Collect all known skill names for RelatedSkillsBadge validation
+  const knownSkillNames = useMemo(() => {
+    const names = new Set<string>()
+    for (const node of nodes) {
+      if (node.type === 'directory' && node.isValidSkill) {
+        names.add(node.name)
+      }
+    }
+    return names
+  }, [nodes])
 
   const toggleExpand = useCallback((path: string) => {
     setExpandedPaths((prev) => {
@@ -384,6 +450,10 @@ export default function FileTree({ nodes, selectedFile, onSelectFile, onDeleteFi
             onRemoveAlias={onRemoveAlias}
             onVersionHistory={onVersionHistory}
             onPublishTo={onPublishTo}
+            healthMap={healthMap}
+            onShowHealth={onShowHealth}
+            onJumpRelated={onJumpRelated}
+            knownSkillNames={knownSkillNames}
           />
         ))}
       </div>

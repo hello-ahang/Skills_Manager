@@ -14,6 +14,8 @@ import importRouter from './routes/import.js';
 import publishRouter from './routes/publish.js';
 import importStreamRouter from './routes/import-stream.js';
 import radarRouter from './routes/radar.js';
+import skillLintRouter from './routes/skill-lint.js';
+import sandboxRouter from './routes/sandbox.js';
 import { loadExtensions } from './extensions.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,6 +40,8 @@ app.use('/api/import', importRouter);
 app.use('/api/publish', publishRouter);
 app.use('/api/import-stream', importStreamRouter);
 app.use('/api/radar', radarRouter);
+app.use('/api/skill-lint', skillLintRouter);
+app.use('/api/sandbox', sandboxRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

@@ -5,6 +5,7 @@ import os from 'os';
 import fs from 'fs-extra';
 import { getConfig, saveConfig } from '../services/configService.js';
 import { buildFileTree } from '../services/fileService.js';
+import { parseYamlField } from '../utils/yamlUtils.js';
 
 const router = Router();
 
@@ -30,8 +31,7 @@ function parseSkillFrontmatter(content: string): { name?: string; description?: 
   const nameMatch = frontmatter.match(/^name:\s*(.+)$/m);
   if (nameMatch) result.name = nameMatch[1].trim().replace(/^['"]|['"]$/g, '');
 
-  const descMatch = frontmatter.match(/^description:\s*(.+)$/m);
-  if (descMatch) result.description = descMatch[1].trim().replace(/^['"]|['"]$/g, '');
+  result.description = parseYamlField(frontmatter, 'description');
 
   return (result.name || result.description) ? result : null;
 }

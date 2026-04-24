@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useRadarStore, type RadarSkillItem, type RadarSearchResult, type RadarCategory, type RadarSkillSource } from '@/stores/radarStore'
 import { useConfigStore } from '@/stores/configStore'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import SandboxPanel from '@/components/skills/SandboxPanel'
 import {
   Loader2,
   Search,
@@ -16,6 +17,7 @@ import {
   RefreshCw,
   AlertCircle,
   Radar,
+  PlayCircle,
 } from 'lucide-react'
 
 // ==================== Source Badge ====================
@@ -79,8 +81,8 @@ function AISearchSection() {
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Radar className="h-5 w-5 text-primary" />
-        <h2 className="text-lg font-semibold">AI 语义搜索</h2>
-        <span className="text-xs text-muted-foreground">描述你的场景，AI 帮你找到匹配的 Skill</span>
+        <h2 className="text-lg font-semibold">AI 智能检索</h2>
+        <span className="text-xs text-muted-foreground">场景搜索 / ClawHub 检索</span>
       </div>
 
       {/* Search scope tabs */}
@@ -93,13 +95,11 @@ function AISearchSection() {
               : 'text-muted-foreground hover:text-foreground'
           }`}
         >
-          Skills 库检索
+          场景搜索
         </button>
         <button
           onClick={() => {
-            setSearchTab('clawhub')
             alert('ClawHub 检索功能正在开发中，敬请期待！')
-            setSearchTab('library')
           }}
           className="rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground/50 cursor-not-allowed"
           title="功能开发中，敬请期待"
@@ -486,8 +486,11 @@ function SkillsListSection() {
 
 // ==================== Main Page ====================
 
+type RadarTopTab = 'overview' | 'sandbox'
+
 export default function SkillsRadarPage() {
   const { skills, loading, error, fetchSkills } = useRadarStore()
+  const [topTab, setTopTab] = useState<RadarTopTab>('overview')
 
   useEffect(() => {
     fetchSkills()
@@ -546,18 +549,52 @@ export default function SkillsRadarPage() {
           </button>
         </div>
 
-        {/* AI Search */}
-        <AISearchSection />
+        {/* Top tab switcher - Large Segment Control (主导航) */}
+        <div className="inline-flex items-center gap-1 rounded-2xl border-2 border-primary/20 bg-gradient-to-br from-primary/5 via-background to-primary/10 p-1.5 shadow-md">
+          <button
+            onClick={() => setTopTab('overview')}
+            className={`inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold transition-all duration-200 ${
+              topTab === 'overview'
+                ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-[1.03]'
+                : 'text-muted-foreground hover:text-foreground hover:bg-background/60'
+            }`}
+          >
+            <Radar className="h-4 w-4" />
+            雷达概览
+          </button>
+          <button
+            onClick={() => setTopTab('sandbox')}
+            className={`inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold transition-all duration-200 ${
+              topTab === 'sandbox'
+                ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-[1.03]'
+                : 'text-muted-foreground hover:text-foreground hover:bg-background/60'
+            }`}
+          >
+            <PlayCircle className="h-4 w-4" />
+            测试沙箱
+          </button>
+        </div>
 
-        <hr className="border-border" />
+        {topTab === 'overview' && (
+          <>
+            {/* AI Search */}
+            <AISearchSection />
 
-        {/* Summary */}
-        <SummarySection />
+            <hr className="border-border" />
 
-        <hr className="border-border" />
+            {/* Summary */}
+            <SummarySection />
 
-        {/* Skills List */}
-        <SkillsListSection />
+            <hr className="border-border" />
+
+            {/* Skills List */}
+            <SkillsListSection />
+          </>
+        )}
+
+        {topTab === 'sandbox' && (
+          <SandboxPanel />
+        )}
       </div>
     </ScrollArea>
   )

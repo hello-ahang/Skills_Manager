@@ -1,11 +1,13 @@
 import fs from 'fs-extra';
 import path from 'path';
 import type { FileTreeNode } from '../../src/types/index.js';
+import { parseYamlField, parseYamlList } from '../utils/yamlUtils.js';
 
 // Parse SKILL.md frontmatter to extract description and check validity
 interface SkillMeta {
   description?: string;
   isValidSkill: boolean;
+  relatedSkills?: string[];
 }
 
 async function parseSkillMeta(dirPath: string): Promise<SkillMeta> {
@@ -26,12 +28,14 @@ async function parseSkillMeta(dirPath: string): Promise<SkillMeta> {
     const frontmatter = frontmatterMatch[1];
     // Extract name and description fields
     const nameMatch = frontmatter.match(/^name:\s*(.+)$/m);
-    const descMatch = frontmatter.match(/^description:\s*(.+)$/m);
+    const description = parseYamlField(frontmatter, 'description');
+    const relatedSkills = parseYamlList(frontmatter, 'related');
 
-    const isValid = !!(nameMatch && descMatch);
+    const isValid = !!(nameMatch && description);
     return {
-      description: descMatch ? descMatch[1].trim() : undefined,
+      description,
       isValidSkill: isValid,
+      relatedSkills: relatedSkills.length > 0 ? relatedSkills : undefined,
     };
   } catch {
     return { isValidSkill: false };
@@ -73,6 +77,9 @@ export async function buildFileTree(dirPath: string): Promise<FileTreeNode[]> {
       }
       if (skillMeta.isValidSkill) {
         node.isValidSkill = true;
+      }
+      if (skillMeta.relatedSkills && skillMeta.relatedSkills.length > 0) {
+        node.relatedSkills = skillMeta.relatedSkills;
       }
       nodes.push(node);
     } else {

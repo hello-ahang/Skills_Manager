@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.1] - 2026-04-24
+
+### Fixed
+
+- 修复 SourceDirStats 有效 Skill 图标与文件树不一致的问题（统一为 FolderCheck）
+- 修复底部「批量健康度检测」和「AI 生成技能」按钮未吸底、随内容滚动的问题
+- 修复健康度检测结果刷新页面后丢失的问题（改为 localStorage 持久化）
+- 修复已有 AI 评估结果的 Skill 打开弹框仍提示「开始评估」而非直接展示结果的问题
+
+---
+
+## [1.4.0] - 2026-04-24
+
+### Added — Skills 工程化平台升级（4 大模块）
+
+#### 模块 1：Skills Lint + 健康度评分
+
+- **静态 Lint 检测**：实现 13 条静态规则，覆盖 4 类质量维度
+  - description 质量：缺失 / 过短 / 过长 / 缺触发词
+  - SKILL.md 结构：frontmatter 缺失 / name 缺失 / 文件过大 / references 引用失效
+  - 安全检测：API Key（OpenAI sk-/AWS/GitHub/Google）/ 密码硬编码 / 内网 URL（alibaba-inc.com 等）
+  - 一致性：name 与目录名一致性 / 子文件命名规范（kebab-case/snake_case）
+- **健康度评分算法**：基于 issue 等级加权（error -25 / warning -8 / info -2），关键字段缺失上限 30，输出 0-100 分 + A/B/C/D/F 等级
+- **AI 评估增强**：可选调用 LLM 评估 description 质量，按需触发避免无效 token 消耗
+- **集成位置**：Skills 库页面文件树每个 Skill 旁显示彩色等级徽章，点击查看详情 Dialog；底部新增"批量健康度检测"按钮
+- **新增 API**：`POST /api/skill-lint/check` / `POST /api/skill-lint/batch` / `POST /api/skill-lint/ai-assess`
+
+#### 模块 2：Skills 测试沙箱
+
+- **模拟 AI 触发决策**：给定用户场景描述，AI 模拟 Coding Agent 决策流程，推荐 Top 3 Skill，期望命中 Rank 1/2/3 → 触发分 1.0/0.7/0.4
+- **匹配度评估**：AI 评估期望 Skill 的 description 与场景的语义匹配度（0-1），可选关闭以节省 token
+- **两种测试模式**（独立 Tab 切换）：
+  - **手动配置场景**：手动添加测试用例（用户场景 + 期望触发的 Skill），支持"加载示例"一键填充
+  - **AI 自动生成场景**：选择目标 Skill，AI 根据 description 自动生成多个不同话术风格的测试场景
+- **整体指标**：自动计算触发准确率 + 平均匹配度，可视化卡片展示
+- **可搜索 Skill 下拉**：基于 cmdk 的 SearchableSkillSelect 组件，支持关键词搜索 + 列表显示 name · description（一行截断），便于 Skills 数量较多时快速定位
+- **历史持久化**：测试结果保存到 `~/.skills-manager/sandbox-history.json`，最多保留 50 条，按测试模式筛选展示，支持回看 / 清空
+- **集成位置**：Skills 雷达页顶部 Tab 切换"雷达概览 / 测试沙箱"，沙箱面板含完整结果表格 + 历史时间线
+- **新增 API**：`POST /api/sandbox/test` / `POST /api/sandbox/auto-generate-cases` / `GET|DELETE /api/sandbox/history`
+
+#### 模块 3：软依赖管理（Related Skills）
+
+- **YAML frontmatter 软依赖声明**：在 SKILL.md frontmatter 增加 `related: [skill-a, skill-b]` 字段，无需版本约束，纯软引用
+- **flow style + block style 兼容**：YAML 列表支持 `[a, b, c]` 和多行 `- item` 两种语法
+- **依赖徽章展示**：文件树 Skill 节点旁显示青色"N 相关"徽章，hover 展示完整列表，点击下拉菜单可跳转
+- **未找到提示**：引用的 Skill 不存在时灰显并标注"未找到"，避免误导
+- **新增工具函数**：`server/utils/yamlUtils.ts` 新增 `parseYamlList` 公共函数
+
+#### 模块 4：场景智能搜索
+
+- **场景搜索**：AI 语义搜索能力（描述使用场景，自动匹配最合适的 Skill）
+
+### Changed
+
+- **README.md**：功能概览表格新增"Skills 工程化"模块说明
+- **server/services/fileService.ts**：`parseSkillMeta` 增加 `relatedSkills` 字段提取
+- **src/types/index.ts**：`FileTreeNode` 增加 `relatedSkills?: string[]` 字段
+- **src/components/skills/FileTree.tsx**：扩展 props 支持健康度徽章 + 软依赖徽章 + 跳转回调
+- **src/pages/SkillsRadarPage.tsx**：顶部新增 Tab 切换层，雷达概览与测试沙箱解耦
+
+---
+
 ## [1.3.1] - 2026-04-22
 
 ### Added
