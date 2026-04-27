@@ -81,15 +81,15 @@ if [ -n "$SHELL_RC" ]; then
     cat >> "$SHELL_RC" << EOF
 
 # ===== Skills Manager =====
-alias sm_run='cd ${INSTALL_DIR} && echo "🚀 启动 Skills Manager..." && npm run dev'
-alias sm_stop='cd ${INSTALL_DIR} && echo "🛑 停止 Skills Manager..." && npm run stop'
+alias sm='cd ${INSTALL_DIR} && echo "🚀 启动 Skills Manager..." && npm run dev'
+alias sm-stop='cd ${INSTALL_DIR} && echo "🛑 停止 Skills Manager..." && npm run stop'
 # ===== End Skills Manager =====
 EOF
     echo -e "${GREEN}✓${NC} 已注册快捷命令到 $(basename $SHELL_RC)"
 else
     echo -e "${YELLOW}⚠${NC} 未找到 .zshrc 或 .bashrc，请手动添加以下别名："
-    echo "  alias sm_run='cd ${INSTALL_DIR} && npm run dev'"
-    echo "  alias sm_stop='cd ${INSTALL_DIR} && npm run stop'"
+    echo "  alias sm='cd ${INSTALL_DIR} && npm run dev'"
+    echo "  alias sm-stop='cd ${INSTALL_DIR} && npm run stop'"
 fi
 
 # 完成
@@ -98,8 +98,8 @@ echo "╔═══════════════════════�
 echo "║          ✅ 安装完成！                    ║"
 echo "╠══════════════════════════════════════════╣"
 echo "║                                          ║"
-echo "║  启动: sm_run  (或 npm run dev)          ║"
-echo "║  停止: sm_stop (或 npm run stop)         ║"
+echo "║  启动: sm      (或 npm run dev)          ║"
+echo "║  停止: sm-stop (或 npm run stop)         ║"
 echo "║                                          ║"
 echo "║  前端: http://localhost:5173              ║"
 echo "║  API:  http://localhost:3001              ║"

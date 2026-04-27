@@ -63,10 +63,10 @@ export default function SearchableSkillSelect({
           <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+      <PopoverContent className="w-80 p-0" align="start">
         <Command>
           <CommandInput placeholder="搜索 Skill..." className={isSm ? 'h-8 text-xs' : 'h-9 text-sm'} />
-          <CommandList>
+          <CommandList className="max-h-64">
             <CommandEmpty>未找到匹配的 Skill</CommandEmpty>
             <CommandGroup>
               {skills.map((s) => (
@@ -77,18 +77,23 @@ export default function SearchableSkillSelect({
                     onValueChange(s.name === value ? '' : s.name)
                     setOpen(false)
                   }}
-                  className={isSm ? 'text-xs py-1.5' : 'text-sm py-2'}
+                  className={cn(
+                    'flex flex-col items-start gap-0.5',
+                    isSm ? 'text-xs py-1.5' : 'text-sm py-2'
+                  )}
                 >
-                  <Check
-                    className={cn(
-                      'h-3.5 w-3.5 shrink-0',
-                      value === s.name ? 'opacity-100' : 'opacity-0'
-                    )}
-                  />
-                  <span className="font-medium shrink-0">{s.name}</span>
+                  <div className="flex w-full items-center gap-2">
+                    <Check
+                      className={cn(
+                        'h-3.5 w-3.5 shrink-0',
+                        value === s.name ? 'opacity-100' : 'opacity-0'
+                      )}
+                    />
+                    <span className="font-medium truncate">{s.name}</span>
+                  </div>
                   {s.description && (
-                    <span className="text-muted-foreground truncate ml-1.5">
-                      · {s.description}
+                    <span className="text-muted-foreground text-xs truncate w-full pl-[1.375rem]">
+                      {s.description}
                     </span>
                   )}
                 </CommandItem>

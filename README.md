@@ -119,14 +119,14 @@ chmod +x install.sh && ./install.sh
 2. 安装项目依赖
 3. 初始化项目数据目录
 4. 初始化用户数据目录（`~/.skills-manager/`）
-5. 注册快捷命令 `sm_run` / `sm_stop` 到 shell 配置
+5. 注册快捷命令 `sm` / `sm-stop` 到 shell 配置
 
 ### 启动与停止
 
 ```bash
 # 快捷命令（安装后新开终端生效）
-sm_run          # 启动项目
-sm_stop         # 停止项目
+sm              # 启动项目
+sm-stop         # 停止项目
 
 # 或使用 npm 命令
 npm run dev     # 开发模式（同时启动前后端）
@@ -145,7 +145,7 @@ chmod +x uninstall.sh && ./uninstall.sh
 
 卸载脚本会清除：
 1. 停止运行中的服务
-2. 清除 shell 别名（`sm_run` / `sm_stop`）
+2. 清除 shell 别名（`sm` / `sm-stop`）
 3. 删除用户数据目录（`~/.skills-manager/`）
 4. 删除项目目录
 

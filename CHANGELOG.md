@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.2] - 2026-04-27
+
+### Fixed
+
+- 修复 Popover 下拉选择器无法弹出的问题（`Button` 组件在 React 18 下缺少 `forwardRef`，导致 Radix Popper 定位引擎无法获取 trigger DOM 节点）
+- 优化 `SearchableSkillSelect` 下拉列表样式：固定宽度、名称与描述分行显示、文字截断、限制列表最大高度
+
+### Changed — 代码架构精简
+
+- **拆分 `importService.ts`**：将 1200+ 行的单文件拆分为 `import/urlParsers.ts`、`import/gitApis.ts`、`import/providerRegistry.ts`、`import/index.ts` 四个模块，职责清晰
+- **移除死代码**：删除 6 个未使用的组件文件（`BulkExportImport.tsx`、`GitHubImporter.tsx`、`GitLabImporter.tsx`、`GiteeImporter.tsx`、`LinkStatusPanel.tsx`、`SyncButton.tsx`）
+- **依赖整理**：移除 `simple-git`、`tar-stream`、`@types/tar-stream` 等未使用依赖，补充 `.gitignore` 规则
+- **代码规范**：移除 `scanService.ts` 中不必要的 `console.log` 调试语句
+
+---
+
 ## [1.4.1] - 2026-04-24
 
 ### Fixed

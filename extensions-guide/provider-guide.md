@@ -117,7 +117,7 @@ export function setup(context) {
 ahang-skills-manager
 
 # 如果使用源码安装
-sm_run
+sm
 ```
 
 启动时你会在终端看到加载日志：
