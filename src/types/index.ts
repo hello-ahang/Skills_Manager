@@ -99,6 +99,103 @@ export interface FormatConverter {
   convert: (content: string) => string;
 }
 
+// ==================== Rubric Evaluation ====================
+
+export type RubricPriority = 'essential' | 'important' | 'optional' | 'pitfall';
+
+export interface RubricItem {
+  id: string;
+  dimension: RubricDimensionId;
+  name: string;
+  description: string;
+  priority: RubricPriority;
+  weight: number;              // 1.0 / 0.7 / 0.3 / 0.9 对应 essential/important/optional/pitfall
+  check: 'static' | 'ai';     // 静态规则检测 or AI 评估
+}
+
+export type RubricDimensionId = 'L1_structure' | 'L2_description' | 'L3_depth' | 'L4_safety';
+
+export interface RubricDimension {
+  id: RubricDimensionId;
+  name: string;
+  description: string;
+  weight: number;              // 维度权重：L1=0.30, L2=0.30, L3=0.25, L4=0.15
+  items: RubricItem[];
+}
+
+export type RubricItemResult = 'pass' | 'fail' | 'skip';
+
+export interface RubricItemReport {
+  itemId: string;
+  result: RubricItemResult;
+  score: number;               // 0 or 1 (pass=1, fail=0)
+  detail?: string;             // 具体说明
+  suggestion?: string;         // 改进建议
+}
+
+export interface RubricDimensionReport {
+  dimensionId: RubricDimensionId;
+  dimensionName: string;
+  score: number;               // 0-100 该维度得分
+  maxScore: number;            // 该维度满分
+  items: RubricItemReport[];
+}
+
+export interface RubricReport {
+  skillName: string;
+  skillPath: string;
+  overallScore: number;        // 0-100 加权总分
+  grade: 'A' | 'B' | 'C' | 'D' | 'F';
+  dimensions: RubricDimensionReport[];
+  evaluatedAt: string;         // ISO timestamp
+  templateId?: string;         // 使用的 Rubric 模板 ID
+}
+
+export interface RubricTemplate {
+  id: string;
+  name: string;
+  description: string;
+  dimensions: RubricDimension[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ==================== Eval Loop ====================
+
+export interface EvalLoopConfig {
+  skillPath: string;
+  targetScore: number;         // 目标分数 0-100，默认 85
+  maxRounds: number;           // 最大迭代轮次，默认 5
+  minImprovement: number;      // 最小提升分数，连续两轮低于此值则退出，默认 2
+  templateId?: string;         // 使用的 Rubric 模板 ID
+}
+
+export interface EvalLoopRound {
+  round: number;
+  score: number;
+  grade: 'A' | 'B' | 'C' | 'D' | 'F';
+  report: RubricReport;
+  improvements: string[];      // 本轮改进内容
+  versionId?: string;          // 版本快照 ID
+  duration: number;            // 耗时 ms
+}
+
+export type EvalLoopStatus = 'running' | 'completed' | 'stopped' | 'failed';
+
+export interface EvalLoopResult {
+  id: string;
+  skillName: string;
+  skillPath: string;
+  config: EvalLoopConfig;
+  status: EvalLoopStatus;
+  exitReason: 'target_reached' | 'max_rounds' | 'low_improvement' | 'user_stopped' | 'error';
+  rounds: EvalLoopRound[];
+  startedAt: string;
+  completedAt?: string;
+  initialScore: number;
+  finalScore: number;
+}
+
 export interface ValidationResult {
   path: string;
   valid: boolean;
