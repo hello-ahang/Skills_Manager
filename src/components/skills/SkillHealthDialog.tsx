@@ -23,6 +23,7 @@ import {
   ChevronRight,
   Radar,
   ShieldCheck,
+  Zap,
 } from 'lucide-react'
 import {
   RadarChart,
@@ -143,6 +144,7 @@ export default function SkillHealthDialog({
   const [rubricLoading, setRubricLoading] = useState(false)
   const [rubricAiLoading, setRubricAiLoading] = useState(false)
   const [expandedDimensions, setExpandedDimensions] = useState<Set<string>>(new Set())
+  const [evalLoopExpanded, setEvalLoopExpanded] = useState(false)
 
   // Sync aiAssessment when report changes (e.g. from batch AI assess)
   useEffect(() => {
@@ -540,6 +542,33 @@ export default function SkillHealthDialog({
                           </>
                         )}
                       </Button>
+                    </div>
+
+                    {/* 一键优化（Eval Loop）折叠区域 */}
+                    <div className="rounded-lg border border-purple-200 dark:border-purple-900 overflow-hidden">
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between p-3 text-left hover:bg-purple-50/50 dark:hover:bg-purple-950/20 transition-colors"
+                        onClick={() => setEvalLoopExpanded(prev => !prev)}
+                      >
+                        <div className="flex items-center gap-1.5 text-sm font-semibold text-purple-700 dark:text-purple-300">
+                          <Zap className="h-4 w-4" />
+                          一键优化（Eval Loop）
+                        </div>
+                        {evalLoopExpanded ? (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </button>
+                      {evalLoopExpanded && (
+                        <div className="border-t border-purple-200 dark:border-purple-900 p-3">
+                          <EvalLoopPanel
+                            skillPath={report.skillPath}
+                            skillName={report.skillName}
+                          />
+                        </div>
+                      )}
                     </div>
                   </>
                 ) : (
