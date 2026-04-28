@@ -17,6 +17,7 @@ import radarRouter from './routes/radar.js';
 import skillLintRouter from './routes/skill-lint.js';
 import sandboxRouter from './routes/sandbox.js';
 import skillRubricRouter from './routes/skill-rubric.js';
+import evalLoopRouter from './routes/eval-loop.js';
 import { loadExtensions } from './extensions.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -44,6 +45,7 @@ app.use('/api/radar', radarRouter);
 app.use('/api/skill-lint', skillLintRouter);
 app.use('/api/sandbox', sandboxRouter);
 app.use('/api/skill-rubric', skillRubricRouter);
+app.use('/api/eval-loop', evalLoopRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
