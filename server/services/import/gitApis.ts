@@ -1,5 +1,6 @@
 import fs from 'fs-extra';
 import path from 'path';
+import { safeUnzipFile } from '../../utils/safeUnzip.js';
 import type { RepoInfo } from '../../../src/types/index.js';
 
 // ==================== GitHub API ====================
@@ -73,14 +74,8 @@ export async function downloadRepoAsZip(
   const buffer = Buffer.from(await response.arrayBuffer());
   await fs.writeFile(zipPath, buffer);
 
-  // Extract using unzipper
-  const unzipper = await import('unzipper');
-  await new Promise<void>((resolve, reject) => {
-    fs.createReadStream(zipPath)
-      .pipe(unzipper.default.Extract({ path: extractDir }))
-      .on('close', resolve)
-      .on('error', reject);
-  });
+  // Extract with ZipSlip protection
+  await safeUnzipFile(zipPath, extractDir);
 
   // Remove the zip file
   await fs.remove(zipPath);

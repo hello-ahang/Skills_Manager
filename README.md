@@ -53,7 +53,16 @@ Skills 统一管理平台 — 为同时使用 Claude、Qoder、QoderWork、Openc
     - **容错提示**：引用的 Skill 在当前 Skills 库中不存在时，会灰显并标注"未找到"，避免误导
     - **使用场景**：帮助管理大量 Skills 时快速发现哪些经常搭配使用（如"代码审查"与"提交规范"）
   - **场景智能搜索**：基于自然语言描述使用场景，AI 语义匹配最合适的 Skills（位于雷达页"AI 智能检索"区域）
-- **使用分析**：轻量级本地分析仪表盘，追踪查看/编辑/AI 优化/导出等操作，热门 Skills 排行、最近活动时间线
+- **Skill Harness 平台**（v1.5~v2.0 新增）：
+  - **Rubric 四维评测引擎**：L1 结构完整性 / L2 描述质量 / L3 内容深度 / L4 安全规范，加权评分 0-100 + A/B/C/D/F 等级，自定义 Rubric 模板
+  - **评测-改进循环（Eval Loop）**：自动化的 Rubric 评测 → AI 改进 → 版本快照 → 再评测循环，SSE 实时进度，退出条件自适应
+  - **智能推荐排名**：语义匹配度 × 0.6 + 质量分 × 0.3 + 使用热度 × 0.1 的综合排名，质量分徽章 + 等级筛选
+  - **Skill 对比评测**：并排雷达图 + 内容 Diff + 触发率对比，支持跨版本对比
+  - **使用反馈采集**：有效/无效/部分有效/建议四种反馈类型，JSONL 存储 + 统计聚合，Skills 库快捷反馈按钮
+  - **自动保鲜机制**：URL 有效性 / 路径存在性 / 反馈趋势 / 修改时间四维检测，文件树保鲜度指示器（绿/黄/红），AI 保鲜建议
+  - **生命周期看板**：6 阶段看板视图（草稿→评测中→已发布→使用中→待优化→已归档），聚合质量分 + 反馈 + 保鲜度数据
+  - **品质锚定创建**：AI 生成 Skill 时选择品质定位（MVP/精打磨/生产级），生成后自动 Rubric 评测并对比目标分
+- **使用分析**：轻量级本地分析仪表盘，追踪查看/编辑/AI 优化/导出等操作，热门 Skills 排行、最近活动时间线、反馈统计维度
 - **Provider 注册模式**：轻量级扩展机制，通过在 `~/.skills-manager/extensions/` 放置 `.js` 扩展文件即可注册自定义导入源和发布目标，无需修改开源代码
 - **扩展插件管理**：设置中支持导入/删除扩展插件（`.js` 文件），无需手动操作文件系统
 - **发布集成（Publish Target）**：支持将 Skills 发布到云端 AI 平台（如悟空智能体平台），内置软链接同步目标，支持审核状态追踪
@@ -190,7 +199,12 @@ skills-manager/
 │   │   ├── importService.ts   # 导入服务（GitHub/ClawHub/ZIP 等 + Provider 注册）
 │   │   ├── importHistoryService.ts  # 导入历史
 │   │   ├── publishService.ts  # 发布服务（Publish Target 注册）
-│   │   └── subscriptionService.ts   # 订阅管理
+│   │   ├── subscriptionService.ts   # 订阅管理
+│   │   ├── rubricService.ts   # Rubric 四维评测引擎
+│   │   ├── evalLoopService.ts # 评测-改进循环引擎
+│   │   ├── compareService.ts  # Skill 对比评测服务
+│   │   ├── feedbackService.ts # 使用反馈采集服务
+│   │   └── freshService.ts    # 自动保鲜检测服务
 │   └── utils/
 │       ├── symlink.ts         # 软链接工具函数
 │       └── validation.ts      # 输入验证
@@ -213,16 +227,22 @@ skills-manager/
 │   │   ├── skills/
 │   │   │   ├── FileTree.tsx           # 文件树（含 AI 优化/导出/别名管理）
 │   │   │   ├── Editor.tsx             # Monaco 编辑器 & Markdown 预览
-│   │   │   ├── AISkillGenerator.tsx   # AI 生成技能弹框
+│   │   │   │   ├── AISkillGenerator.tsx   # AI 生成技能弹框（含品质锚定）
 │   │   │   ├── AISkillOptimizer.tsx   # AI 优化技能弹框（DiffEditor 对比）
+│   │   │   ├── SkillHealthDialog.tsx  # 健康度弹框（四维雷达图 + Rubric 报告 + Eval Loop）
+│   │   │   ├── SkillComparePanel.tsx  # Skill 对比评测面板
+│   │   │   ├── EvalLoopPanel.tsx      # 评测-改进循环面板
 │   │   │   ├── VersionHistoryDialog.tsx # 版本历史弹框
 │   │   │   └── SearchResults.tsx      # 搜索结果组件
 │   │   └── ui/                # shadcn/ui 基础组件
 │   ├── pages/
 │   │   ├── ProjectsPage.tsx   # 项目管理页
 │   │   ├── SkillsPage.tsx     # Skills 库页
+│   │   ├── SkillsRadarPage.tsx # Skills 雷达页
 │   │   ├── ImportPage.tsx     # 导入中心页
-│   │   ├── AnalyticsPage.tsx  # 使用分析页
+│   │   ├── AnalyticsPage.tsx  # 使用分析页（含反馈统计）
+│   │   ├── LifecyclePage.tsx  # 生命周期看板页
+│   │   ├── HomePage.tsx       # 首页
 │   │   └── HelpPage.tsx       # 帮助中心页
 │   ├── stores/                # Zustand 状态管理
 │   │   ├── configStore.ts     # 全局配置
@@ -313,6 +333,92 @@ Skills Manager 提供了轻量级的扩展机制，允许开发者通过编写 `
 也可以在设置页面的"Provider 注册模式"中直接导入 `.js` 扩展文件，无需手动操作文件系统。
 
 详细开发指南请参阅 [extensions-guide/provider-guide.md](extensions-guide/provider-guide.md)。
+
+## 自定义 Rubric 模板
+
+Rubric 评测引擎支持自定义评测模板，允许你根据团队标准调整评分维度和权重。
+
+### 模板存储位置
+
+自定义模板存储在用户数据目录下：
+
+```
+~/.skills-manager/rubric-templates/
+```
+
+每个模板为独立的 JSON 文件（如 `my-template.json`）。
+
+### 通过 API 管理模板
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/skill-rubric/templates` | 获取所有可用模板（内置 + 自定义） |
+| PUT | `/api/skill-rubric/templates` | 保存/更新自定义模板 |
+
+**获取模板列表：**
+
+```bash
+curl http://localhost:3001/api/skill-rubric/templates
+```
+
+**保存自定义模板：**
+
+```bash
+curl -X PUT http://localhost:3001/api/skill-rubric/templates \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "my-team-rubric",
+    "name": "团队自定义评测模板",
+    "version": "1.0.0",
+    "dimensions": [
+      {
+        "id": "L1",
+        "label": "结构完整性",
+        "weight": 0.30,
+        "items": [
+          { "id": "frontmatter-exists", "label": "Frontmatter 存在", "priority": "essential", "weight": 1.0, "check": "static" },
+          { "id": "name-exists", "label": "name 字段存在", "priority": "essential", "weight": 1.0, "check": "static" }
+        ]
+      },
+      {
+        "id": "L2",
+        "label": "描述质量",
+        "weight": 0.30,
+        "items": [
+          { "id": "desc-length", "label": "描述长度充分", "priority": "important", "weight": 0.7, "check": "llm" }
+        ]
+      }
+    ]
+  }'
+```
+
+### 手动创建模板
+
+也可以直接在模板目录下创建 JSON 文件：
+
+```bash
+# 创建模板目录（首次使用）
+mkdir -p ~/.skills-manager/rubric-templates
+
+# 创建模板文件
+cat > ~/.skills-manager/rubric-templates/my-template.json << 'EOF'
+{
+  "id": "my-template",
+  "name": "我的评测模板",
+  "version": "1.0.0",
+  "dimensions": [
+    {
+      "id": "L1",
+      "label": "结构完整性",
+      "weight": 0.35,
+      "items": [...]
+    }
+  ]
+}
+EOF
+```
+
+> 模板 `id` 字段为唯一标识，`name` 为显示名称。维度权重之和建议为 1.0。评测时通过 `templateId` 参数指定使用的模板，不指定则使用内置默认模板。
 
 ## API 文档
 

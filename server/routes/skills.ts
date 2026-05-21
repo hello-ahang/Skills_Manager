@@ -10,8 +10,10 @@ import {
   searchFiles,
 } from '../services/fileService.js';
 import { recordEvent } from '../services/analyticsService.js';
+import { pathGuard } from '../middleware/pathGuard.js';
 
 const router = Router();
+const guard = pathGuard();
 
 // GET /api/skills - Get skills file tree
 // Supports optional ?sourceDirId= query param to specify which source dir to use
@@ -67,7 +69,7 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // GET /api/skills/file - Get file content
-router.get('/file', async (req: Request, res: Response) => {
+router.get('/file', guard, async (req: Request, res: Response) => {
   try {
     const filePath = req.query.path as string;
     if (!filePath) {
@@ -87,7 +89,7 @@ router.get('/file', async (req: Request, res: Response) => {
 });
 
 // PUT /api/skills/file - Save file content
-router.put('/file', async (req: Request, res: Response) => {
+router.put('/file', guard, async (req: Request, res: Response) => {
   try {
     const { path: filePath, content } = req.body;
     if (!filePath || content === undefined) {
@@ -104,7 +106,7 @@ router.put('/file', async (req: Request, res: Response) => {
 });
 
 // POST /api/skills/file - Create new file
-router.post('/file', async (req: Request, res: Response) => {
+router.post('/file', guard, async (req: Request, res: Response) => {
   try {
     const { path: filePath, content, templateId, variables } = req.body;
     if (!filePath) {
@@ -139,7 +141,7 @@ router.post('/file', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/skills/file - Delete file
-router.delete('/file', async (req: Request, res: Response) => {
+router.delete('/file', guard, async (req: Request, res: Response) => {
   try {
     const filePath = req.query.path as string;
     if (!filePath) {
@@ -203,7 +205,7 @@ router.get('/templates', async (_req: Request, res: Response) => {
 });
 
 // PUT /api/skills/rename - Rename file or directory
-router.put('/rename', async (req: Request, res: Response) => {
+router.put('/rename', guard, async (req: Request, res: Response) => {
   try {
     const { oldPath, newName } = req.body;
     if (!oldPath || !newName) {
@@ -242,7 +244,7 @@ router.put('/rename', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/skills/directory - Delete directory
-router.delete('/directory', async (req: Request, res: Response) => {
+router.delete('/directory', guard, async (req: Request, res: Response) => {
   try {
     const dirPath = req.query.path as string;
     if (!dirPath) {
@@ -271,7 +273,7 @@ router.delete('/directory', async (req: Request, res: Response) => {
 });
 
 // POST /api/skills/directory - Create new directory
-router.post('/directory', async (req: Request, res: Response) => {
+router.post('/directory', guard, async (req: Request, res: Response) => {
   try {
     const { path: dirPath } = req.body;
     if (!dirPath) {
@@ -294,7 +296,7 @@ router.post('/directory', async (req: Request, res: Response) => {
 });
 
 // GET /api/skills/folder-contents - Read all text files in a directory recursively
-router.get('/folder-contents', async (req: Request, res: Response) => {
+router.get('/folder-contents', guard, async (req: Request, res: Response) => {
   try {
     const fs = await import('fs-extra');
     const dirPath = req.query.path as string;

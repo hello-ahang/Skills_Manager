@@ -25,7 +25,10 @@ import {
   detectProvider,
 } from '../services/importService.js';
 import { getUserConfig, saveUserConfig } from '../services/configService.js';
+import { isPathInside, validateFileName } from '../utils/validation.js';
 import type { ImportOptions, ScannedSkill } from '../../src/types/index.js';
+
+const ALLOWED_EXTENSION_EXTS = new Set(['.js', '.mjs']);
 
 const router = Router();
 
@@ -753,8 +756,19 @@ router.get('/extensions', async (_req: Request, res: Response) => {
   }
 });
 
+function extensionUploadHandler(req: Request, res: Response, next: (err?: unknown) => void): void {
+  extensionUpload.single('file')(req, res, (err: unknown) => {
+    if (err) {
+      const message = err instanceof Error ? err.message : '扩展上传失败';
+      res.status(400).json({ error: message });
+      return;
+    }
+    next();
+  });
+}
+
 // POST /api/import/extensions/upload - Upload an extension plugin (.js file)
-router.post('/extensions/upload', extensionUpload.single('file'), async (req: Request, res: Response) => {
+router.post('/extensions/upload', extensionUploadHandler, async (req: Request, res: Response) => {
   try {
     if (!req.file) {
       res.status(400).json({ error: '未上传文件' });
@@ -764,27 +778,45 @@ router.post('/extensions/upload', extensionUpload.single('file'), async (req: Re
     const extDir = path.join(os.homedir(), '.skills-manager', 'extensions');
     await fs.ensureDir(extDir);
 
-    const targetPath = path.join(extDir, req.file.originalname);
+    const safeName = path.basename(req.file.originalname);
+    if (!validateFileName(safeName)) {
+      await fs.remove(req.file.path).catch(() => {});
+      res.status(400).json({ error: '文件名包含非法字符' });
+      return;
+    }
+    const ext = path.extname(safeName).toLowerCase();
+    if (!ALLOWED_EXTENSION_EXTS.has(ext)) {
+      await fs.remove(req.file.path).catch(() => {});
+      res.status(400).json({ error: '只允许上传 .js 或 .mjs 扩展' });
+      return;
+    }
 
-    // Check if file already exists
+    const targetPath = path.join(extDir, safeName);
+    if (!isPathInside(targetPath, extDir)) {
+      await fs.remove(req.file.path).catch(() => {});
+      res.status(400).json({ error: '目标路径越界' });
+      return;
+    }
+
     const exists = await fs.pathExists(targetPath);
 
-    // Copy uploaded file to extensions directory
     await fs.copy(req.file.path, targetPath, { overwrite: true });
 
-    // Clean up temp file
     await fs.remove(req.file.path).catch(() => {});
 
     res.json({
       success: true,
-      name: req.file.originalname,
+      name: safeName,
       path: targetPath,
       replaced: exists,
       message: exists
-        ? `扩展插件 ${req.file.originalname} 已更新，重启后生效`
-        : `扩展插件 ${req.file.originalname} 已安装，重启后生效`,
+        ? `扩展插件 ${safeName} 已更新，重启后生效`
+        : `扩展插件 ${safeName} 已安装，重启后生效`,
     });
   } catch (error) {
+    if (req.file?.path) {
+      await fs.remove(req.file.path).catch(() => {});
+    }
     const message = error instanceof Error ? error.message : 'Failed to upload extension';
     res.status(500).json({ error: message });
   }
@@ -794,7 +826,23 @@ router.post('/extensions/upload', extensionUpload.single('file'), async (req: Re
 router.delete('/extensions/:name', async (req: Request, res: Response) => {
   try {
     const extDir = path.join(os.homedir(), '.skills-manager', 'extensions');
-    const filePath = path.join(extDir, req.params.name as string);
+    const rawName = req.params.name as string;
+    const safeName = path.basename(rawName);
+    if (!validateFileName(safeName)) {
+      res.status(400).json({ error: '文件名包含非法字符' });
+      return;
+    }
+    const ext = path.extname(safeName).toLowerCase();
+    if (!ALLOWED_EXTENSION_EXTS.has(ext)) {
+      res.status(400).json({ error: '只允许操作 .js 或 .mjs 扩展' });
+      return;
+    }
+
+    const filePath = path.join(extDir, safeName);
+    if (!isPathInside(filePath, extDir)) {
+      res.status(400).json({ error: '路径越界' });
+      return;
+    }
 
     if (!await fs.pathExists(filePath)) {
       res.status(404).json({ error: '扩展插件不存在' });
@@ -802,7 +850,7 @@ router.delete('/extensions/:name', async (req: Request, res: Response) => {
     }
 
     await fs.remove(filePath);
-    res.json({ success: true, message: `扩展插件 ${req.params.name} 已删除，重启后生效` });
+    res.json({ success: true, message: `扩展插件 ${safeName} 已删除，重启后生效` });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete extension' });
   }

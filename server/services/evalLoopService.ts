@@ -4,13 +4,63 @@ import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import { evaluateSkill } from './rubricService.js';
 import { createVersion } from './versionService.js';
-import type { RubricReport } from './rubricService.js';
+import type {
+  RubricReport as ServerRubricReport,
+  RubricDimensionReport as ServerRubricDimensionReport,
+  RubricItemReport as ServerRubricItemReport,
+  RubricDimensionId as ServerRubricDimensionId,
+} from './rubricService.js';
 import type {
   EvalLoopConfig,
   EvalLoopRound,
   EvalLoopResult,
   EvalLoopStatus,
+  RubricReport as SharedRubricReport,
+  RubricDimensionReport as SharedRubricDimensionReport,
+  RubricItemReport as SharedRubricItemReport,
+  RubricDimensionId as SharedRubricDimensionId,
 } from '../../src/types/index.js';
+
+const DIMENSION_ID_MAP: Record<ServerRubricDimensionId, SharedRubricDimensionId> = {
+  L1: 'L1_structure',
+  L2: 'L2_description',
+  L3: 'L3_depth',
+  L4: 'L4_safety',
+};
+
+// Server's RubricReport carries internal scoring fields (label, weight) that
+// the wire-format type omits. Project to the shared shape at the boundary.
+function toSharedReport(serverReport: ServerRubricReport): SharedRubricReport {
+  return {
+    skillName: serverReport.skillName,
+    skillPath: serverReport.skillPath,
+    overallScore: serverReport.overallScore,
+    grade: serverReport.grade,
+    dimensions: serverReport.dimensions.map(toSharedDimension),
+    evaluatedAt: serverReport.evaluatedAt,
+    templateId: serverReport.templateId,
+  };
+}
+
+function toSharedDimension(d: ServerRubricDimensionReport): SharedRubricDimensionReport {
+  return {
+    dimensionId: DIMENSION_ID_MAP[d.dimensionId],
+    dimensionName: d.label,
+    score: d.score,
+    maxScore: 100,
+    items: d.items.map(toSharedItem),
+  };
+}
+
+function toSharedItem(i: ServerRubricItemReport): SharedRubricItemReport {
+  return {
+    itemId: i.itemId,
+    result: i.result,
+    score: i.score,
+    detail: i.detail || undefined,
+    suggestion: i.suggestion,
+  };
+}
 
 // ==================== Types ====================
 
@@ -82,7 +132,7 @@ export async function getEvalHistory(skillPath?: string): Promise<EvalLoopResult
 
 export async function improveSkill(
   skillDir: string,
-  report: RubricReport,
+  report: ServerRubricReport,
   aiModelConfig: AIModelConfig,
 ): Promise<string[]> {
   const skillMdPath = path.join(skillDir, 'SKILL.md');
@@ -175,7 +225,7 @@ ${improvementList}
 export async function startEvalLoop(
   config: EvalLoopConfig,
   aiModelConfig: AIModelConfig,
-  onProgress?: (round: EvalLoopRound) => void,
+  onProgress?: (round: EvalLoopRound, loopId: string) => void,
 ): Promise<EvalLoopResult> {
   const loopId = uuidv4();
   const abortController = new AbortController();
@@ -211,7 +261,7 @@ export async function startEvalLoop(
       roundNumber++;
 
       // Step 1: Evaluate current state
-      let report: RubricReport;
+      let report: ServerRubricReport;
       try {
         report = await evaluateSkill(skillName, config.skillPath, {
           templateId: config.templateId,
@@ -238,12 +288,12 @@ export async function startEvalLoop(
           round: roundNumber,
           score: currentScore,
           grade: report.grade,
-          report,
+          report: toSharedReport(report),
           improvements: [],
           duration: Date.now() - roundStart,
         };
         result.rounds.push(round);
-        onProgress?.(round);
+        onProgress?.(round, loopId);
         result.exitReason = 'target_reached';
         result.status = 'completed';
         break;
@@ -258,12 +308,12 @@ export async function startEvalLoop(
             round: roundNumber,
             score: currentScore,
             grade: report.grade,
-            report,
+            report: toSharedReport(report),
             improvements: [],
             duration: Date.now() - roundStart,
           };
           result.rounds.push(round);
-          onProgress?.(round);
+          onProgress?.(round, loopId);
           result.exitReason = 'low_improvement';
           result.status = 'completed';
           break;
@@ -276,12 +326,12 @@ export async function startEvalLoop(
           round: roundNumber,
           score: currentScore,
           grade: report.grade,
-          report,
+          report: toSharedReport(report),
           improvements: [],
           duration: Date.now() - roundStart,
         };
         result.rounds.push(round);
-        onProgress?.(round);
+        onProgress?.(round, loopId);
         result.exitReason = 'max_rounds';
         result.status = 'completed';
         break;
@@ -293,12 +343,12 @@ export async function startEvalLoop(
           round: roundNumber,
           score: currentScore,
           grade: report.grade,
-          report,
+          report: toSharedReport(report),
           improvements: [],
           duration: Date.now() - roundStart,
         };
         result.rounds.push(round);
-        onProgress?.(round);
+        onProgress?.(round, loopId);
         result.exitReason = 'user_stopped';
         result.status = 'stopped';
         break;
@@ -327,13 +377,13 @@ export async function startEvalLoop(
         round: roundNumber,
         score: currentScore,
         grade: report.grade,
-        report,
+        report: toSharedReport(report),
         improvements,
         versionId,
         duration: Date.now() - roundStart,
       };
       result.rounds.push(round);
-      onProgress?.(round);
+      onProgress?.(round, loopId);
     }
 
     // Finalize status if not already set by exit conditions

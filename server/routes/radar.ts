@@ -1,12 +1,20 @@
 import { Router, Request, Response } from 'express';
-import { aggregateAllSkills, loadRadarTags, saveRadarTags, loadRadarSummary, saveRadarSummary } from '../services/radarService.js';
+import {
+  aggregateAllSkills,
+  loadRadarTags, saveRadarTags,
+  loadRadarSummary, saveRadarSummary,
+  loadRubricCache, saveRubricCache, updateRubricCacheEntry,
+  loadUsageStats, saveUsageStats, incrementUsage,
+  type RubricCacheEntry,
+} from '../services/radarService.js';
 
 const router = Router();
 
 // GET /api/radar/skills - Aggregate all Skills from library + projects + import history
-router.get('/skills', async (_req: Request, res: Response) => {
+router.get('/skills', async (req: Request, res: Response) => {
   try {
-    const skills = await aggregateAllSkills();
+    const sourceDirId = req.query.sourceDirId as string | undefined;
+    const skills = await aggregateAllSkills(sourceDirId);
     res.json({ skills });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to aggregate skills';
@@ -74,7 +82,7 @@ ${skillsList}
     const content = data?.choices?.[0]?.message?.content || '[]';
 
     // Parse JSON from AI response (handle possible markdown code blocks)
-    let results;
+    let results: { name: string; score: number; reason: string }[];
     try {
       const jsonStr = content.replace(/```json?\s*/g, '').replace(/```\s*/g, '').trim();
       results = JSON.parse(jsonStr);
@@ -82,7 +90,39 @@ ${skillsList}
       results = [];
     }
 
-    res.json({ results });
+    // ── Enrich with Rubric scores + usage stats, compute composite ranking ──
+    const [rubricCache, usageStats] = await Promise.all([
+      loadRubricCache(),
+      loadUsageStats(),
+    ]);
+
+    // Compute max usage for normalization
+    const usageCounts = results.map(r => usageStats[r.name] || 0);
+    const maxUsage = Math.max(...usageCounts, 1);
+
+    const enrichedResults = results.map(r => {
+      const rubric = rubricCache[r.name];
+      const rubricScore = rubric?.score ?? 0;
+      const rubricGrade = rubric?.grade;
+      const usageCount = usageStats[r.name] || 0;
+      const normalizedUsage = usageCount / maxUsage;
+
+      // compositeScore = 语义匹配度 × 0.6 + 质量分(归一化到0-1) × 0.3 + 使用热度(归一化) × 0.1
+      const compositeScore = r.score * 0.6 + (rubricScore / 100) * 0.3 + normalizedUsage * 0.1;
+
+      return {
+        ...r,
+        rubricScore,
+        rubricGrade,
+        usageCount,
+        compositeScore: Math.round(compositeScore * 1000) / 1000,
+      };
+    });
+
+    // Sort by compositeScore descending
+    enrichedResults.sort((a, b) => b.compositeScore - a.compositeScore);
+
+    res.json({ results: enrichedResults });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Search failed';
     res.status(500).json({ error: message });
@@ -301,6 +341,80 @@ router.put('/cache/summary', async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to save summary';
+    res.status(500).json({ error: message });
+  }
+});
+
+// ==================== Rubric Cache API ====================
+
+// GET /api/radar/cache/rubric - Load Rubric score cache
+router.get('/cache/rubric', async (_req: Request, res: Response) => {
+  try {
+    const cache = await loadRubricCache();
+    res.json({ cache });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to load rubric cache';
+    res.status(500).json({ error: message });
+  }
+});
+
+// PUT /api/radar/cache/rubric - Save Rubric score cache
+router.put('/cache/rubric', async (req: Request, res: Response) => {
+  try {
+    const { cache } = req.body;
+    if (!cache || typeof cache !== 'object') {
+      res.status(400).json({ error: 'cache object is required' });
+      return;
+    }
+    await saveRubricCache(cache);
+    res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to save rubric cache';
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/radar/cache/rubric/update - Update a single Rubric cache entry
+router.post('/cache/rubric/update', async (req: Request, res: Response) => {
+  try {
+    const { skillName, grade, score, evaluatedAt } = req.body;
+    if (!skillName || !grade || score == null) {
+      res.status(400).json({ error: 'skillName, grade, and score are required' });
+      return;
+    }
+    await updateRubricCacheEntry(skillName, { grade, score, evaluatedAt: evaluatedAt || new Date().toISOString() });
+    res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update rubric cache';
+    res.status(500).json({ error: message });
+  }
+});
+
+// ==================== Usage Stats API ====================
+
+// GET /api/radar/usage - Load usage stats
+router.get('/usage', async (_req: Request, res: Response) => {
+  try {
+    const stats = await loadUsageStats();
+    res.json({ stats });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to load usage stats';
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/radar/usage/increment - Increment usage count for a skill
+router.post('/usage/increment', async (req: Request, res: Response) => {
+  try {
+    const { skillName } = req.body;
+    if (!skillName || typeof skillName !== 'string') {
+      res.status(400).json({ error: 'skillName is required' });
+      return;
+    }
+    await incrementUsage(skillName);
+    res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to increment usage';
     res.status(500).json({ error: message });
   }
 });

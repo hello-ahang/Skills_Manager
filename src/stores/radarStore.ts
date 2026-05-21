@@ -1,5 +1,9 @@
 import { create } from 'zustand'
+import { toast } from 'sonner'
 import { useConfigStore } from './configStore'
+
+// Magic key used as the dirKey when "all source dirs" view is selected.
+const ALL_DIRS_KEY = '__all__'
 
 // ==================== Types ====================
 
@@ -20,12 +24,19 @@ export interface RadarSkillItem {
   version?: string
   tags?: string[]
   category?: string
+  rubricGrade?: 'A' | 'B' | 'C' | 'D' | 'F'
+  rubricScore?: number
+  usageCount?: number
 }
 
 export interface RadarSearchResult {
   name: string
   score: number
   reason: string
+  rubricGrade?: 'A' | 'B' | 'C' | 'D' | 'F'
+  rubricScore?: number
+  usageCount?: number
+  compositeScore?: number
 }
 
 export interface RadarCategory {
@@ -55,14 +66,16 @@ async function loadCachedTagsFromServer(): Promise<Record<string, string[]>> {
 }
 
 async function saveCachedTagsToServer(tags: Record<string, string[]>): Promise<void> {
-  try {
-    await fetch('/api/radar/cache/tags', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tags }),
-    })
-  } catch {
-    // Silent fail
+  // Throws on network/server failure — callers MUST await and surface the
+  // error to the user via toast. The previous fire-and-forget pattern lost
+  // failures silently, leaving the UI showing tags that were never persisted.
+  const res = await fetch('/api/radar/cache/tags', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tags }),
+  })
+  if (!res.ok) {
+    throw new Error(`保存标签缓存失败: HTTP ${res.status}`)
   }
 }
 
@@ -78,14 +91,15 @@ async function loadCachedSummaryFromServer(): Promise<RadarSummary | null> {
 }
 
 async function saveCachedSummaryToServer(summary: RadarSummary): Promise<void> {
-  try {
-    await fetch('/api/radar/cache/summary', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ summary }),
-    })
-  } catch {
-    // Silent fail
+  // Throws on network/server failure — callers MUST await and surface the
+  // error. Previous silent catch lost failures (review H6).
+  const res = await fetch('/api/radar/cache/summary', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ summary }),
+  })
+  if (!res.ok) {
+    throw new Error(`保存摘要缓存失败: HTTP ${res.status}`)
   }
 }
 
@@ -102,6 +116,8 @@ interface RadarState {
   searchError: string | null
 
   summary: RadarSummary | null
+  summaryMap: Record<string, RadarSummary>
+  currentSourceDirId: string
   summarizing: boolean
   summaryError: string | null
 
@@ -112,17 +128,19 @@ interface RadarState {
   // Filter state
   sourceFilter: string
   tagFilter: string
+  gradeFilter: string
 
   // Cache loading state
   cacheLoaded: boolean
 
-  fetchSkills: () => Promise<void>
+  fetchSkills: (sourceDirId?: string) => Promise<void>
   loadCache: () => Promise<void>
   aiSearch: (query: string) => Promise<void>
-  generateSummary: () => Promise<void>
+  generateSummary: (sourceDirId?: string) => Promise<void>
   generateTags: () => Promise<void>
   setSourceFilter: (filter: string) => void
   setTagFilter: (filter: string) => void
+  setGradeFilter: (filter: string) => void
   clearSearch: () => void
 }
 
@@ -149,6 +167,8 @@ export const useRadarStore = create<RadarState>()((set, get) => ({
   searchError: null,
 
   summary: null,
+  summaryMap: {},
+  currentSourceDirId: '',
   summarizing: false,
   summaryError: null,
 
@@ -158,6 +178,7 @@ export const useRadarStore = create<RadarState>()((set, get) => ({
 
   sourceFilter: 'all',
   tagFilter: 'all',
+  gradeFilter: 'all',
 
   cacheLoaded: false,
 
@@ -167,18 +188,23 @@ export const useRadarStore = create<RadarState>()((set, get) => ({
       loadCachedTagsFromServer(),
       loadCachedSummaryFromServer(),
     ])
-    set({ tags, summary, cacheLoaded: true })
+    const summaryMap = summary ? { ...get().summaryMap, [ALL_DIRS_KEY]: summary } : get().summaryMap
+    set({ tags, summary, summaryMap, cacheLoaded: true })
   },
 
-  fetchSkills: async () => {
-    set({ loading: true, error: null })
+  fetchSkills: async (sourceDirId?: string) => {
+    const dirKey = sourceDirId || ALL_DIRS_KEY
+    set({ loading: true, error: null, currentSourceDirId: dirKey })
     try {
       // Ensure cache is loaded first
       if (!get().cacheLoaded) {
         await get().loadCache()
       }
 
-      const res = await fetch('/api/radar/skills')
+      const url = sourceDirId
+        ? `/api/radar/skills?sourceDirId=${encodeURIComponent(sourceDirId)}`
+        : '/api/radar/skills'
+      const res = await fetch(url)
       if (!res.ok) throw new Error('Failed to fetch skills')
       const data = await res.json()
 
@@ -189,7 +215,9 @@ export const useRadarStore = create<RadarState>()((set, get) => ({
         tags: cachedTags[s.name] || s.tags,
       }))
 
-      set({ skills, loading: false })
+      // Restore summary from summaryMap if available for this sourceDirId
+      const cachedSummary = get().summaryMap[dirKey] || null
+      set({ skills, loading: false, summary: cachedSummary })
     } catch (err) {
       set({ loading: false, error: err instanceof Error ? err.message : 'Failed to fetch skills' })
     }
@@ -230,7 +258,7 @@ export const useRadarStore = create<RadarState>()((set, get) => ({
     }
   },
 
-  generateSummary: async () => {
+  generateSummary: async (sourceDirId?: string) => {
     const model = getSelectedModel()
     if (!model) {
       set({ summaryError: '请先在设置中配置并测试 AI 模型' })
@@ -239,7 +267,8 @@ export const useRadarStore = create<RadarState>()((set, get) => ({
 
     set({ summarizing: true, summaryError: null })
     try {
-      const { skills } = get()
+      const { skills, currentSourceDirId } = get()
+      const dirKey = sourceDirId !== undefined ? (sourceDirId || ALL_DIRS_KEY) : currentSourceDirId
       const res = await fetch('/api/radar/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -259,9 +288,16 @@ export const useRadarStore = create<RadarState>()((set, get) => ({
 
       const data = await res.json()
       const summary = data.summary as RadarSummary
-      // Save to server-side file
-      saveCachedSummaryToServer(summary)
-      set({ summary, summarizing: false })
+      // Persist to server-side cache. Failures must surface — silently
+      // swallowing them leaves the UI showing data that was never saved.
+      try {
+        await saveCachedSummaryToServer(summary)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : '保存摘要缓存失败')
+      }
+      // Store in summaryMap keyed by sourceDirId
+      const summaryMap = { ...get().summaryMap, [dirKey]: summary }
+      set({ summary, summaryMap, summarizing: false })
     } catch (err) {
       set({ summarizing: false, summaryError: err instanceof Error ? err.message : 'Summary failed' })
     }
@@ -306,8 +342,12 @@ export const useRadarStore = create<RadarState>()((set, get) => ({
 
       // Merge with existing tags
       const mergedTags = { ...get().tags, ...newTags }
-      // Save to server-side file
-      saveCachedTagsToServer(mergedTags)
+      // Persist to server-side cache; toast on failure rather than swallow.
+      try {
+        await saveCachedTagsToServer(mergedTags)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : '保存标签缓存失败')
+      }
 
       // Update skills with new tags
       const updatedSkills = get().skills.map(s => ({
@@ -323,5 +363,6 @@ export const useRadarStore = create<RadarState>()((set, get) => ({
 
   setSourceFilter: (filter: string) => set({ sourceFilter: filter }),
   setTagFilter: (filter: string) => set({ tagFilter: filter }),
+  setGradeFilter: (filter: string) => set({ gradeFilter: filter }),
   clearSearch: () => set({ searchQuery: '', searchResults: [], searchError: null }),
 }))

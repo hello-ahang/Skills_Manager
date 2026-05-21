@@ -32,11 +32,30 @@ async function readIndex(): Promise<SkillVersion[]> {
 
 async function writeIndex(versions: SkillVersion[]): Promise<void> {
   await ensureDirs();
-  await fs.writeJson(INDEX_PATH, versions, { spaces: 2 });
+  // Atomic write: tmp file + rename. Prevents partial/concurrent writes from
+  // corrupting index.json when two createVersion calls race.
+  const tmpPath = `${INDEX_PATH}.tmp-${process.pid}-${Date.now()}`;
+  await fs.writeJson(tmpPath, versions, { spaces: 2 });
+  await fs.rename(tmpPath, INDEX_PATH);
+}
+
+function looksBinary(buffer: Buffer): boolean {
+  const sampleSize = Math.min(buffer.length, 8000);
+  for (let i = 0; i < sampleSize; i++) {
+    if (buffer[i] === 0) return true;
+  }
+  // Best-effort: try strict utf-8 decode and re-encode, mismatch means binary
+  try {
+    const text = buffer.toString('utf-8');
+    return Buffer.byteLength(text, 'utf-8') !== buffer.length;
+  } catch {
+    return true;
+  }
 }
 
 /**
  * Recursively collect all files in a directory (relative paths + content).
+ * Text files are stored as UTF-8 strings; binary files as base64.
  */
 async function collectFiles(dirPath: string, basePath: string = dirPath): Promise<VersionFile[]> {
   const files: VersionFile[] = [];
@@ -44,7 +63,7 @@ async function collectFiles(dirPath: string, basePath: string = dirPath): Promis
 
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
   for (const entry of entries) {
-    if (entry.name.startsWith('.')) continue; // skip hidden files
+    if (entry.name.startsWith('.')) continue;
     const fullPath = path.join(dirPath, entry.name);
     const relativePath = path.relative(basePath, fullPath);
 
@@ -53,15 +72,17 @@ async function collectFiles(dirPath: string, basePath: string = dirPath): Promis
       files.push(...subFiles);
     } else {
       try {
-        const content = await fs.readFile(fullPath, 'utf-8');
+        const buffer = await fs.readFile(fullPath);
         const stat = await fs.stat(fullPath);
+        const binary = looksBinary(buffer);
         files.push({
           relativePath,
-          content,
+          content: binary ? buffer.toString('base64') : buffer.toString('utf-8'),
           size: stat.size,
+          encoding: binary ? 'base64' : 'utf-8',
         });
       } catch {
-        // Skip unreadable files (binary, etc.)
+        // Skip unreadable files
       }
     }
   }
@@ -165,8 +186,21 @@ export async function getVersionDetail(versionId: string): Promise<VersionDetail
 }
 
 /**
- * Restore a version — overwrite current files with snapshot.
- * Automatically creates a "before restore" snapshot first.
+ * Restore a version atomically.
+ *
+ * Sequence (each step verified before proceeding):
+ *   1. Snapshot current state into a backup version (must succeed before we
+ *      touch the user directory).
+ *   2. Materialize the target snapshot into a sibling tmp dir
+ *      `<skillPath>.restore-tmp-<ts>`.
+ *   3. Move current dir aside to `<skillPath>.old-<ts>`.
+ *   4. Rename tmp into place at `<skillPath>`.
+ *   5. Remove the .old- directory once the swap is durable.
+ *
+ * On any failure after step 3, rename .old- back to recover the original.
+ * Hidden files (anything starting with '.') in the original are preserved by
+ * copying them into the tmp dir before the swap, mirroring the previous
+ * behaviour where the loop skipped them when wiping.
  */
 export async function restoreVersion(versionId: string): Promise<{ success: boolean; backupVersionId?: string }> {
   const detail = await getVersionDetail(versionId);
@@ -176,29 +210,59 @@ export async function restoreVersion(versionId: string): Promise<{ success: bool
 
   const { skillPath, files } = detail;
 
-  // Verify skill directory exists
   if (!await fs.pathExists(skillPath)) {
     throw new Error(`Skill directory not found: ${skillPath}`);
   }
 
-  // Auto-create backup before restore
+  // Step 1: backup. Failure here aborts before we touch anything.
   const backupVersion = await createVersion(skillPath, 'backup', '回滚前自动备份');
 
-  // Remove all existing files in the skill directory (except hidden)
-  const existingEntries = await fs.readdir(skillPath, { withFileTypes: true });
-  for (const entry of existingEntries) {
-    if (entry.name.startsWith('.')) continue;
-    await fs.remove(path.join(skillPath, entry.name));
-  }
+  const ts = Date.now();
+  const tmpPath = `${skillPath}.restore-tmp-${process.pid}-${ts}`;
+  const oldPath = `${skillPath}.old-${process.pid}-${ts}`;
 
-  // Write snapshot files
-  for (const file of files) {
-    const targetPath = path.join(skillPath, file.relativePath);
-    await fs.ensureDir(path.dirname(targetPath));
-    await fs.writeFile(targetPath, file.content, 'utf-8');
-  }
+  try {
+    // Step 2: materialize snapshot into tmp dir.
+    await fs.ensureDir(tmpPath);
+    for (const file of files) {
+      const targetPath = path.join(tmpPath, file.relativePath);
+      await fs.ensureDir(path.dirname(targetPath));
+      if (file.encoding === 'base64') {
+        await fs.writeFile(targetPath, Buffer.from(file.content, 'base64'));
+      } else {
+        await fs.writeFile(targetPath, file.content, 'utf-8');
+      }
+    }
 
-  return { success: true, backupVersionId: backupVersion.id };
+    // Preserve hidden files (.git, .skill-meta, etc.) from the live dir into tmp,
+    // matching the prior wipe-loop's `startsWith('.')` skip.
+    const existingEntries = await fs.readdir(skillPath, { withFileTypes: true });
+    for (const entry of existingEntries) {
+      if (!entry.name.startsWith('.')) continue;
+      await fs.copy(path.join(skillPath, entry.name), path.join(tmpPath, entry.name));
+    }
+
+    // Step 3 + 4: atomic swap. On most filesystems both renames are O(1) and
+    // crash-safe in the sense that either old or new is fully present, never
+    // a half-merged state.
+    await fs.rename(skillPath, oldPath);
+    try {
+      await fs.rename(tmpPath, skillPath);
+    } catch (innerErr) {
+      // Step 4 failed — roll the original back.
+      await fs.rename(oldPath, skillPath).catch(() => {});
+      throw innerErr;
+    }
+
+    // Step 5: cleanup. Best-effort; failures here don't roll back the restore.
+    await fs.remove(oldPath).catch(() => {});
+
+    return { success: true, backupVersionId: backupVersion.id };
+  } catch (err) {
+    // tmp may still exist if step 2 or 3 failed; sweep it.
+    await fs.remove(tmpPath).catch(() => {});
+    throw err;
+  }
 }
 
 /**
@@ -229,49 +293,63 @@ export async function diffVersion(versionId: string): Promise<VersionDiff[]> {
 
   // Collect current files
   const currentFiles = await collectFiles(skillPath);
-  const currentMap = new Map(currentFiles.map(f => [f.relativePath, f.content]));
-  const versionMap = new Map(versionFiles.map(f => [f.relativePath, f.content]));
+  const currentMap = new Map(currentFiles.map(f => [f.relativePath, f]));
+  const versionMap = new Map(versionFiles.map(f => [f.relativePath, f]));
 
-  // Check files in version snapshot
   for (const vf of versionFiles) {
-    const currentContent = currentMap.get(vf.relativePath);
-    if (currentContent === undefined) {
-      // File exists in version but not in current → was removed
+    const cf = currentMap.get(vf.relativePath);
+    const versionIsBinary = vf.encoding === 'base64';
+
+    if (!cf) {
       diffs.push({
         relativePath: vf.relativePath,
         status: 'removed',
-        versionContent: vf.content,
+        versionContent: versionIsBinary ? undefined : vf.content,
+        isBinary: versionIsBinary,
       });
-    } else if (currentContent !== vf.content) {
-      // File exists in both but content differs
+      continue;
+    }
+
+    const currentIsBinary = cf.encoding === 'base64';
+    const isBinary = versionIsBinary || currentIsBinary;
+    const sameContent = cf.content === vf.content;
+
+    if (sameContent) {
       diffs.push({
         relativePath: vf.relativePath,
-        status: 'modified',
-        currentContent,
-        versionContent: vf.content,
+        status: 'unchanged',
+        isBinary,
+      });
+    } else if (isBinary) {
+      diffs.push({
+        relativePath: vf.relativePath,
+        status: 'binary',
+        isBinary: true,
       });
     } else {
       diffs.push({
         relativePath: vf.relativePath,
-        status: 'unchanged',
+        status: 'modified',
+        currentContent: cf.content,
+        versionContent: vf.content,
       });
     }
   }
 
-  // Check files in current that don't exist in version → were added
   for (const cf of currentFiles) {
     if (!versionMap.has(cf.relativePath)) {
+      const isBinary = cf.encoding === 'base64';
       diffs.push({
         relativePath: cf.relativePath,
         status: 'added',
-        currentContent: cf.content,
+        currentContent: isBinary ? undefined : cf.content,
+        isBinary,
       });
     }
   }
 
-  // Sort: modified first, then added, then removed, then unchanged
-  const order: Record<string, number> = { modified: 0, added: 1, removed: 2, unchanged: 3 };
-  diffs.sort((a, b) => order[a.status] - order[b.status]);
+  const order: Record<string, number> = { modified: 0, binary: 1, added: 2, removed: 3, unchanged: 4 };
+  diffs.sort((a, b) => (order[a.status] ?? 99) - (order[b.status] ?? 99));
 
   return diffs;
 }

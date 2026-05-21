@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import type { AppConfig, ToolDefinition, AppPreferences, SourceDir, LLMModel } from '../../src/types/index.js';
+import { log } from '../utils/logger.js';
 
 // Project-level config (safe to commit to git)
 // SM_PKG_ROOT is set by cli.ts for npm global install; fallback to cwd for local dev
@@ -143,7 +144,7 @@ async function migrateToUserConfig(): Promise<void> {
 
     if (!hasUserData) return;
 
-    console.log('[ConfigService] Migrating user data from project config to ~/.skills-manager/user-config.json ...');
+    log.info('[ConfigService] Migrating user data from project config to ~/.skills-manager/user-config.json ...');
 
     // Read existing user config (if any)
     await fs.ensureDir(USER_CONFIG_DIR);
@@ -174,9 +175,9 @@ async function migrateToUserConfig(): Promise<void> {
     };
     await fs.writeJson(PROJECT_CONFIG_PATH, cleanedProjectConfig, { spaces: 2 });
 
-    console.log('[ConfigService] Migration complete. User data saved to ~/.skills-manager/user-config.json');
+    log.info('[ConfigService] Migration complete. User data saved to ~/.skills-manager/user-config.json');
   } catch (error) {
-    console.error('[ConfigService] Migration failed:', error);
+    log.error({ err: error }, '[ConfigService] Migration failed');
   }
 }
 
@@ -205,7 +206,7 @@ async function getProjectConfig(): Promise<ProjectConfig> {
     await fs.writeJson(PROJECT_CONFIG_PATH, DEFAULT_PROJECT_CONFIG, { spaces: 2 });
     return { ...DEFAULT_PROJECT_CONFIG };
   } catch (error) {
-    console.error('Error reading project config:', error);
+    log.error({ err: error }, 'Error reading project config');
     return { ...DEFAULT_PROJECT_CONFIG };
   }
 }
@@ -224,7 +225,7 @@ export async function getUserConfig(): Promise<UserConfig> {
     await fs.writeJson(USER_CONFIG_PATH, DEFAULT_USER_CONFIG, { spaces: 2 });
     return { ...DEFAULT_USER_CONFIG };
   } catch (error) {
-    console.error('Error reading user config:', error);
+    log.error({ err: error }, 'Error reading user config');
     return { ...DEFAULT_USER_CONFIG };
   }
 }
@@ -250,6 +251,33 @@ export async function saveUserConfig(config: UserConfig): Promise<void> {
     }
   }
   await fs.writeJson(USER_CONFIG_PATH, config, { spaces: 2 });
+}
+
+/**
+ * Resolve the active LLM model config from the user config. Used by
+ * server-side AI features to avoid taking baseUrl/apiKey from request bodies
+ * (SSRF + credential exfiltration risk).
+ */
+export interface ResolvedAIModelConfig {
+  baseUrl: string;
+  apiKey: string;
+  modelName: string;
+}
+
+export async function getDefaultModelConfig(): Promise<ResolvedAIModelConfig | null> {
+  const userConfig = await getUserConfig();
+  if (!userConfig.defaultModelId || !Array.isArray(userConfig.llmModels)) {
+    return null;
+  }
+  const model = userConfig.llmModels.find(m => m.id === userConfig.defaultModelId);
+  if (!model || !model.baseUrl || !model.apiKey || !model.modelName) {
+    return null;
+  }
+  return {
+    baseUrl: model.baseUrl,
+    apiKey: model.apiKey,
+    modelName: model.modelName,
+  };
 }
 
 /**

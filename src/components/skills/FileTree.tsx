@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { FileTreeNode } from '@/types'
 import { cn } from '@/lib/utils'
-import { ChevronRight, ChevronDown, File, Folder, FolderOpen, FolderCheck, FolderOpenDot, Trash2, Plus, ChevronsUpDown, ChevronsDownUp, FilePlus, FolderPlus, Pencil, MoreHorizontal, Wand2, Download, Tag, X, History, Send } from 'lucide-react'
+import { ChevronRight, ChevronDown, File, Folder, FolderOpen, FolderCheck, FolderOpenDot, Trash2, Plus, ChevronsUpDown, ChevronsDownUp, FilePlus, FolderPlus, Pencil, MoreHorizontal, Wand2, Download, Tag, X, History, Send, MessageSquarePlus } from 'lucide-react'
 import RelatedSkillsBadge from '@/components/skills/RelatedSkillsBadge'
 import { Button } from '@/components/ui/button'
 import {
@@ -25,7 +25,7 @@ import {
 export interface SkillHealthSummary {
   score: number
   grade: 'A' | 'B' | 'C' | 'D' | 'F'
-  issuesCount: number
+  failCount?: number
 }
 
 interface FileTreeProps {
@@ -50,6 +50,10 @@ interface FileTreeProps {
   onShowHealth?: (dirPath: string) => void
   /** 点击相关 Skill 跳转回调 */
   onJumpRelated?: (skillName: string) => void
+  /** 快捷反馈回调：(dirPath, dirName, feedbackType) */
+  onFeedback?: (dirPath: string, dirName: string, feedbackType: 'effective' | 'ineffective' | 'suggestion') => void
+  /** Skill 路径 -> 保鲜度等级 (fresh/stale/expired) */
+  freshnessMap?: Record<string, 'fresh' | 'stale' | 'expired'>
 }
 
 interface TreeNodeProps {
@@ -75,9 +79,11 @@ interface TreeNodeProps {
   onRemoveAlias?: (dirPath: string) => void
   onVersionHistory?: (dirPath: string, dirName: string) => void
   onPublishTo?: (dirPath: string, dirName: string) => void
+  onFeedback?: (dirPath: string, dirName: string, feedbackType: 'effective' | 'ineffective' | 'suggestion') => void
+  freshnessMap?: Record<string, 'fresh' | 'stale' | 'expired'>
 }
 
-function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, onSelectFile, onDeleteFile, onDeleteDir, onCreateFile, onCreateDir, onRename, onAIOptimize, onExport, skillAliases, onSetAlias, onRemoveAlias, onVersionHistory, onPublishTo, healthMap, onShowHealth, onJumpRelated, knownSkillNames }: TreeNodeProps) {
+function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, onSelectFile, onDeleteFile, onDeleteDir, onCreateFile, onCreateDir, onRename, onAIOptimize, onExport, skillAliases, onSetAlias, onRemoveAlias, onVersionHistory, onPublishTo, onFeedback, freshnessMap, healthMap, onShowHealth, onJumpRelated, knownSkillNames }: TreeNodeProps) {
   const isSelected = node.path === selectedFile
   const isDirectory = node.type === 'directory'
   const expanded = expandedPaths.has(node.path)
@@ -162,6 +168,21 @@ function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, on
             onJump={onJumpRelated}
           />
         )}
+        {isDirectory && node.isValidSkill && depth === 0 && freshnessMap?.[node.path] && (() => {
+          const level = freshnessMap[node.path]
+          const config = {
+            fresh: { color: 'bg-green-500', label: '保鲜度：良好' },
+            stale: { color: 'bg-yellow-500', label: '保鲜度：需关注' },
+            expired: { color: 'bg-red-500', label: '保鲜度：已过期' },
+          }
+          const c = config[level] || config.fresh
+          return (
+            <span
+              className={cn('inline-block shrink-0 w-2 h-2 rounded-full', c.color)}
+              title={c.label}
+            />
+          )
+        })()}
         {isDirectory && node.isValidSkill && depth === 0 && healthMap?.[node.path] && onShowHealth && (() => {
           const h = healthMap[node.path]
           const colorMap: Record<string, string> = {
@@ -177,7 +198,7 @@ function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, on
                 'inline-flex items-center gap-0.5 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold cursor-pointer transition-colors',
                 colorMap[h.grade] || colorMap.C,
               )}
-              title={`健康度 ${h.score}/100，${h.issuesCount} 个问题`}
+              title={`Rubric 评分 ${h.score}/100`}
               onClick={(e) => { e.stopPropagation(); onShowHealth(node.path) }}
             >
               {h.grade} {h.score}
@@ -253,6 +274,23 @@ function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, on
                     发布到...
                   </DropdownMenuItem>
                 )}
+                {isDirectory && node.isValidSkill && depth === 0 && onFeedback && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => onFeedback(node.path, node.name, 'effective')}>
+                      <MessageSquarePlus className="mr-2 h-3.5 w-3.5 text-green-600" />
+                      反馈：有效
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onFeedback(node.path, node.name, 'ineffective')}>
+                      <MessageSquarePlus className="mr-2 h-3.5 w-3.5 text-red-600" />
+                      反馈：无效
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onFeedback(node.path, node.name, 'suggestion')}>
+                      <MessageSquarePlus className="mr-2 h-3.5 w-3.5 text-blue-600" />
+                      反馈：建议
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
@@ -317,6 +355,8 @@ function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, on
               onRemoveAlias={onRemoveAlias}
               onVersionHistory={onVersionHistory}
               onPublishTo={onPublishTo}
+              onFeedback={onFeedback}
+              freshnessMap={freshnessMap}
               healthMap={healthMap}
               onShowHealth={onShowHealth}
               onJumpRelated={onJumpRelated}
@@ -357,7 +397,7 @@ function collectDefaultExpanded(nodes: FileTreeNode[], depth = 0): string[] {
   return paths
 }
 
-export default function FileTree({ nodes, selectedFile, onSelectFile, onDeleteFile, onDeleteDir, onCreateFile, onCreateDir, onRename, onAIOptimize, onExport, skillAliases, onSetAlias, onRemoveAlias, onVersionHistory, onPublishTo, healthMap, onShowHealth, onJumpRelated }: FileTreeProps) {
+export default function FileTree({ nodes, selectedFile, onSelectFile, onDeleteFile, onDeleteDir, onCreateFile, onCreateDir, onRename, onAIOptimize, onExport, skillAliases, onSetAlias, onRemoveAlias, onVersionHistory, onPublishTo, onFeedback, freshnessMap, healthMap, onShowHealth, onJumpRelated }: FileTreeProps) {
   // Default: all directories collapsed
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const allDirPaths = useMemo(() => collectDirPaths(nodes), [nodes])
@@ -450,6 +490,8 @@ export default function FileTree({ nodes, selectedFile, onSelectFile, onDeleteFi
             onRemoveAlias={onRemoveAlias}
             onVersionHistory={onVersionHistory}
             onPublishTo={onPublishTo}
+            onFeedback={onFeedback}
+            freshnessMap={freshnessMap}
             healthMap={healthMap}
             onShowHealth={onShowHealth}
             onJumpRelated={onJumpRelated}

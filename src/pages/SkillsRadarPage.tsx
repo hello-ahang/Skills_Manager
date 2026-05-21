@@ -3,6 +3,7 @@ import { useRadarStore, type RadarSkillItem, type RadarSearchResult, type RadarC
 import { useConfigStore } from '@/stores/configStore'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import SandboxPanel from '@/components/skills/SandboxPanel'
+import { toast } from 'sonner'
 import {
   Loader2,
   Search,
@@ -10,189 +11,18 @@ import {
   Tags,
   ChevronDown,
   ChevronRight,
-  Library,
-  FolderOpen,
-  History,
   Filter,
   RefreshCw,
   AlertCircle,
   Radar,
   PlayCircle,
+  TrendingUp,
+  GitCompareArrows,
 } from 'lucide-react'
+import SkillComparePanel from '@/components/skills/SkillComparePanel'
+import AISearchSection from '@/components/radar/AISearchSection'
+import { SourceBadge, TagBadge, GradeBadge } from '@/components/radar/badges'
 
-// ==================== Source Badge ====================
-
-function SourceBadge({ source, sourceName }: { source: string; sourceName: string }) {
-  const config: Record<string, { icon: typeof Library; color: string }> = {
-    library: { icon: Library, color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-    project: { icon: FolderOpen, color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
-    'import-history': { icon: History, color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
-  }
-  const { icon: Icon, color } = config[source] || config.library
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
-      <Icon className="h-3 w-3" />
-      {sourceName}
-    </span>
-  )
-}
-
-// ==================== Tag Badge ====================
-
-function TagBadge({ tag }: { tag: string }) {
-  return (
-    <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
-      {tag}
-    </span>
-  )
-}
-
-// ==================== AI Search Section ====================
-
-function AISearchSection() {
-  const { searchQuery, searchResults, searching, searchError, skills, aiSearch, clearSearch } = useRadarStore()
-  const { llmModels, defaultModelId } = useConfigStore()
-  const [input, setInput] = useState('')
-  const [searchTab, setSearchTab] = useState<'library' | 'clawhub'>('library')
-  const defaultModel = llmModels.find(m => m.id === defaultModelId && m.tested)
-    || llmModels.find(m => m.tested)
-    || null
-  const hasModel = !!defaultModel
-
-  const handleSearch = () => {
-    if (!input.trim()) return
-    aiSearch(input.trim())
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSearch()
-    }
-  }
-
-  // Find full skill info for search results
-  const enrichedResults = searchResults.map(r => {
-    const skill = skills.find(s => s.name === r.name)
-    return { ...r, skill }
-  })
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Radar className="h-5 w-5 text-primary" />
-        <h2 className="text-lg font-semibold">AI 智能检索</h2>
-        <span className="text-xs text-muted-foreground">场景搜索 / ClawHub 检索</span>
-      </div>
-
-      {/* Search scope tabs */}
-      <div className="flex items-center gap-1 rounded-lg border bg-muted/50 p-1 w-fit">
-        <button
-          onClick={() => setSearchTab('library')}
-          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-            searchTab === 'library'
-              ? 'bg-background text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          场景搜索
-        </button>
-        <button
-          onClick={() => {
-            alert('ClawHub 检索功能正在开发中，敬请期待！')
-          }}
-          className="rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground/50 cursor-not-allowed"
-          title="功能开发中，敬请期待"
-        >
-          ClawHub 检索
-        </button>
-      </div>
-
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="描述你的使用场景，如：帮我做代码审查、旅行规划、生成 PPT..."
-            className="h-10 w-full rounded-lg border bg-background pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
-        </div>
-        <button
-          onClick={handleSearch}
-          disabled={!input.trim() || searching || !hasModel}
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          AI 搜索
-        </button>
-        {searchQuery && (
-          <button
-            onClick={() => { clearSearch(); setInput('') }}
-            className="inline-flex h-10 items-center rounded-lg border px-3 text-sm text-muted-foreground hover:bg-accent"
-          >
-            清除
-          </button>
-        )}
-      </div>
-
-      {!hasModel && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          请先在右上角「模型配置」中添加模型、测试通过并设置默认使用模型
-        </div>
-      )}
-      {hasModel && (
-        <p className="text-xs text-muted-foreground">
-          当前使用模型：<strong>{defaultModel!.displayName}</strong>（{defaultModel!.modelName}）
-        </p>
-      )}
-
-      {searchError && (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          {searchError}
-        </div>
-      )}
-
-      {enrichedResults.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            找到 <strong>{enrichedResults.length}</strong> 个匹配的 Skill（场景：{searchQuery}）
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {enrichedResults.map((r, i) => (
-              <div key={i} className="rounded-lg border bg-card p-4 space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-medium text-sm">{r.name}</h3>
-                  <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                    {Math.round(r.score * 100)}%
-                  </span>
-                </div>
-                {r.skill?.description && (
-                  <p className="text-xs text-muted-foreground line-clamp-2">{r.skill.description}</p>
-                )}
-                <p className="text-xs text-primary/80 italic">"{r.reason}"</p>
-                {r.skill && (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <SourceBadge source={r.skill.source} sourceName={r.skill.sourceName} />
-                    {r.skill.tags?.map(t => <TagBadge key={t} tag={t} />)}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {searchQuery && !searching && enrichedResults.length === 0 && !searchError && (
-        <p className="text-sm text-muted-foreground">未找到匹配的 Skill，试试换个描述方式？</p>
-      )}
-    </div>
-  )
-}
 
 // ==================== Summary Section ====================
 
@@ -223,7 +53,7 @@ function SummarySection() {
           <span className="text-xs text-muted-foreground">AI 分析所有 Skills 的能力分布</span>
         </div>
         <button
-          onClick={generateSummary}
+          onClick={() => generateSummary()}
           disabled={summarizing || skills.length === 0 || !hasModel}
           className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -311,7 +141,7 @@ function SummarySection() {
 // ==================== Skills List Section ====================
 
 function SkillsListSection() {
-  const { skills, tags, tagging, tagError, generateTags, sourceFilter, tagFilter, setSourceFilter, setTagFilter } = useRadarStore()
+  const { skills, tags, tagging, tagError, generateTags, sourceFilter, tagFilter, gradeFilter, setSourceFilter, setTagFilter, setGradeFilter } = useRadarStore()
   const { llmModels, defaultModelId } = useConfigStore()
   const defaultModel = llmModels.find(m => m.id === defaultModelId && m.tested)
     || llmModels.find(m => m.tested)
@@ -319,15 +149,25 @@ function SkillsListSection() {
   const hasModel = !!defaultModel
 
   const [searchText, setSearchText] = useState('')
+  const [showCompare, setShowCompare] = useState(false)
 
-  // Collect all unique sources and tags for filters
+  // Collect all unique sources, tags, and grades for filters
   const allSources = Array.from(new Set(skills.map(s => s.source)))
   const allTags = Array.from(new Set(skills.flatMap(s => s.tags || [])))
+  const allGrades = (['A', 'B', 'C', 'D', 'F'] as const).filter(g => skills.some(s => s.rubricGrade === g))
+  const hasAnyGrade = skills.some(s => s.rubricGrade)
 
   // Apply filters + search
   const filtered = skills.filter(s => {
     if (sourceFilter !== 'all' && s.source !== sourceFilter) return false
     if (tagFilter !== 'all' && !(s.tags || []).includes(tagFilter)) return false
+    if (gradeFilter !== 'all') {
+      if (gradeFilter === 'unrated') {
+        if (s.rubricGrade) return false
+      } else if (s.rubricGrade !== gradeFilter) {
+        return false
+      }
+    }
     if (searchText.trim()) {
       const q = searchText.trim().toLowerCase()
       const nameMatch = s.name.toLowerCase().includes(q)
@@ -394,6 +234,24 @@ function SkillsListSection() {
             </select>
           )}
 
+          {/* Grade filter */}
+          {hasAnyGrade && (
+            <div className="flex items-center gap-1">
+              <Award className="h-3.5 w-3.5 text-muted-foreground" />
+              <select
+                value={gradeFilter}
+                onChange={e => setGradeFilter(e.target.value)}
+                className="h-8 rounded-md border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="all">全部等级</option>
+                {allGrades.map(g => (
+                  <option key={g} value={g}>{g} 级</option>
+                ))}
+                <option value="unrated">未评测</option>
+              </select>
+            </div>
+          )}
+
           {/* AI generate tags button */}
           <button
             onClick={generateTags}
@@ -403,6 +261,17 @@ function SkillsListSection() {
           >
             {tagging ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Tags className="h-3.5 w-3.5" />}
             {tagging ? '生成中...' : untaggedCount > 0 ? `AI 生成标签 (${untaggedCount})` : '标签已生成'}
+          </button>
+
+          {/* Compare button */}
+          <button
+            onClick={() => setShowCompare(true)}
+            disabled={skills.filter(s => s.path).length < 2}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 px-3 py-1.5 text-xs font-medium text-violet-600 hover:bg-violet-50 disabled:opacity-50 disabled:cursor-not-allowed dark:border-violet-800 dark:text-violet-400 dark:hover:bg-violet-950"
+            title="选择两个 Skill 进行 Rubric 对比评测"
+          >
+            <GitCompareArrows className="h-3.5 w-3.5" />
+            对比评测
           </button>
         </div>
       </div>
@@ -419,23 +288,27 @@ function SkillsListSection() {
         <div className="max-h-[500px] overflow-y-auto">
           <table className="w-full text-left table-fixed">
             <colgroup>
-              <col className="w-[45%]" />
+              <col className="w-[35%]" />
+              <col className="w-[15%]" />
               <col className="w-[20%]" />
-              <col className="w-[25%]" />
               <col className="w-[10%]" />
+              <col className="w-[12%]" />
+              <col className="w-[8%]" />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm">
               <tr className="border-b">
                 <th className="px-4 py-2 text-xs font-medium text-muted-foreground">名称 / 描述</th>
                 <th className="px-4 py-2 text-xs font-medium text-muted-foreground">来源</th>
                 <th className="px-4 py-2 text-xs font-medium text-muted-foreground">标签</th>
+                <th className="px-4 py-2 text-xs font-medium text-muted-foreground">质量</th>
+                <th className="px-4 py-2 text-xs font-medium text-muted-foreground">使用次数</th>
                 <th className="px-4 py-2 text-xs font-medium text-muted-foreground">版本</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
                     {skills.length === 0 ? '暂无 Skills 数据' : '没有匹配的 Skills'}
                   </td>
                 </tr>
@@ -469,6 +342,17 @@ function SkillsListSection() {
                       </div>
                     </td>
                     <td className="px-4 py-2.5">
+                      {skill.rubricGrade
+                        ? <GradeBadge grade={skill.rubricGrade} score={skill.rubricScore} />
+                        : <span className="text-xs text-muted-foreground">—</span>
+                      }
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className="text-xs text-muted-foreground">
+                        {(skill.usageCount ?? 0) > 0 ? skill.usageCount : '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">
                       <span className="text-xs text-muted-foreground">
                         {skill.version ? `v${skill.version}` : '—'}
                       </span>
@@ -480,6 +364,13 @@ function SkillsListSection() {
           </table>
         </div>
       </div>
+
+      {/* Skill Compare Panel */}
+      <SkillComparePanel
+        open={showCompare}
+        onOpenChange={setShowCompare}
+        skills={skills.filter(s => s.path).map(s => ({ name: s.name, path: s.path! }))}
+      />
     </div>
   )
 }
@@ -490,11 +381,17 @@ type RadarTopTab = 'overview' | 'sandbox'
 
 export default function SkillsRadarPage() {
   const { skills, loading, error, fetchSkills } = useRadarStore()
+  const { sourceDirs } = useConfigStore()
   const [topTab, setTopTab] = useState<RadarTopTab>('overview')
+  const [selectedSourceDirId, setSelectedSourceDirId] = useState<string>('')
 
   useEffect(() => {
-    fetchSkills()
-  }, [fetchSkills])
+    fetchSkills(selectedSourceDirId || undefined)
+  }, [fetchSkills, selectedSourceDirId])
+
+  const handleSourceDirChange = (dirId: string) => {
+    setSelectedSourceDirId(dirId)
+  }
 
   if (loading && skills.length === 0) {
     return (
@@ -514,7 +411,7 @@ export default function SkillsRadarPage() {
           <AlertCircle className="h-8 w-8" />
           <p className="text-sm">{error}</p>
           <button
-            onClick={fetchSkills}
+            onClick={() => fetchSkills(selectedSourceDirId || undefined)}
             className="mt-2 inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs hover:bg-accent"
           >
             <RefreshCw className="h-3.5 w-3.5" />
@@ -539,14 +436,29 @@ export default function SkillsRadarPage() {
               通过 AI 实现 Skills 智能检索、能力总览和自动标签分类，解决资产不透明和场景匹配困难的痛点
             </p>
           </div>
-          <button
-            onClick={fetchSkills}
-            disabled={loading}
-            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
-          >
-            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            刷新数据
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Skills 库选择器 */}
+            {sourceDirs.length > 0 && (
+              <select
+                value={selectedSourceDirId}
+                onChange={e => handleSourceDirChange(e.target.value)}
+                className="rounded-lg border bg-background px-3 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="">全部 Skills 库</option>
+                {sourceDirs.map(dir => (
+                  <option key={dir.id} value={dir.id}>{dir.name || dir.path}</option>
+                ))}
+              </select>
+            )}
+            <button
+              onClick={() => fetchSkills(selectedSourceDirId || undefined)}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              刷新数据
+            </button>
+          </div>
         </div>
 
         {/* Top tab switcher - Large Segment Control (主导航) */}

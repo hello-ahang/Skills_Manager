@@ -29,6 +29,7 @@ import {
   getBitbucketRepoInfo,
   downloadBitbucketContents,
 } from './import/gitApis.js';
+import { safeUnzipFile } from '../utils/safeUnzip.js';
 
 const TEMP_DIR = path.join(os.tmpdir(), 'skills-manager-import');
 
@@ -844,14 +845,8 @@ export async function scanZip(zipPath: string): Promise<{ skills: ScannedSkill[]
   await fs.ensureDir(tempDir);
 
   try {
-    // Extract ZIP
-    const unzipper = await import('unzipper');
-    await new Promise<void>((resolve, reject) => {
-      fs.createReadStream(zipPath)
-        .pipe(unzipper.default.Extract({ path: tempDir }))
-        .on('close', resolve)
-        .on('error', reject);
-    });
+    // Extract ZIP with ZipSlip protection
+    await safeUnzipFile(zipPath, tempDir);
 
     // Scan for skills
     const skills = await scanForSkills(tempDir);

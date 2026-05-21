@@ -91,21 +91,36 @@ console.log('');
 // Dynamic import to ensure env vars are set before server loads
 await import('./index.js');
 
+// Read access token (initialized by server during startup)
+const { ensureToken } = await import('./middleware/auth.js');
+const token = await ensureToken();
+
+const host = process.env.SM_HOST || '127.0.0.1';
+const url = `http://${host}:${port}/?token=${token}`;
+
+console.log('');
+console.log(`  本地访问地址: ${url}`);
+console.log(`  访问令牌:     ${token}`);
+console.log('');
+console.log('  ⚠️  请勿将令牌泄露给他人；删除 ~/.skills-manager/security.json 可重置。');
+console.log('');
+
 // Open browser
 if (shouldOpen) {
-  const url = `http://localhost:${port}`;
-  const { exec } = await import('child_process');
+  const { spawn } = await import('child_process');
   const platform = process.platform;
-  const cmd =
-    platform === 'darwin' ? `open "${url}"` :
-    platform === 'win32' ? `start "${url}"` :
-    `xdg-open "${url}"`;
 
   setTimeout(() => {
-    exec(cmd, (err) => {
-      if (err) {
-        console.log(`  请手动打开浏览器访问: ${url}`);
+    try {
+      if (platform === 'darwin') {
+        spawn('open', [url], { detached: true, stdio: 'ignore' }).unref();
+      } else if (platform === 'win32') {
+        spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref();
+      } else {
+        spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref();
       }
-    });
+    } catch {
+      console.log(`  请手动打开浏览器访问: ${url}`);
+    }
   }, 1000);
 }

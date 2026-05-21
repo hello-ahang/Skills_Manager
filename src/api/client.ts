@@ -1,4 +1,84 @@
 const API_BASE = '/api';
+const TOKEN_STORAGE_KEY = 'sm.token';
+
+function captureTokenFromUrl(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (token) {
+      window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+      params.delete('token');
+      const newSearch = params.toString();
+      const newUrl = `${window.location.pathname}${newSearch ? `?${newSearch}` : ''}${window.location.hash}`;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+  } catch {
+    // ignore — fall back to whatever is already in storage
+  }
+}
+
+captureTokenFromUrl();
+
+export function getApiToken(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return window.localStorage.getItem(TOKEN_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function setApiToken(token: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  } catch {
+    // ignore
+  }
+}
+
+function isInternalApiUrl(input: RequestInfo | URL): boolean {
+  let urlStr = '';
+  if (typeof input === 'string') urlStr = input;
+  else if (input instanceof URL) urlStr = input.pathname + input.search;
+  else if (input && typeof (input as Request).url === 'string') urlStr = (input as Request).url;
+
+  if (!urlStr) return false;
+  if (urlStr.startsWith('/api/')) return true;
+  try {
+    const u = new URL(urlStr, window.location.origin);
+    return u.origin === window.location.origin && u.pathname.startsWith('/api/');
+  } catch {
+    return false;
+  }
+}
+
+function patchFetch(): void {
+  if (typeof window === 'undefined') return;
+  const w = window as Window & { __smFetchPatched?: boolean };
+  if (w.__smFetchPatched) return;
+  w.__smFetchPatched = true;
+
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = function patched(input: RequestInfo | URL, init?: RequestInit) {
+    if (!isInternalApiUrl(input)) {
+      return originalFetch(input, init);
+    }
+    const token = getApiToken();
+    if (!token) return originalFetch(input, init);
+
+    const merged: RequestInit = { ...(init || {}) };
+    const existing = new Headers(merged.headers || (input instanceof Request ? input.headers : undefined));
+    if (!existing.has('X-SM-Token')) {
+      existing.set('X-SM-Token', token);
+    }
+    merged.headers = existing;
+    return originalFetch(input, merged);
+  };
+}
+
+patchFetch();
 
 interface RequestOptions {
   method?: string;
@@ -13,15 +93,24 @@ class ApiError extends Error {
   }
 }
 
+function buildHeaders(extra: Record<string, string> = {}, includeJsonContentType = true): Record<string, string> {
+  const headers: Record<string, string> = { ...extra };
+  if (includeJsonContentType && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+  const token = getApiToken();
+  if (token && !headers['X-SM-Token']) {
+    headers['X-SM-Token'] = token;
+  }
+  return headers;
+}
+
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, headers = {} } = options;
 
   const config: RequestInit = {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
+    headers: buildHeaders(headers),
   };
 
   if (body) {
@@ -119,7 +208,7 @@ export const toolsApi = {
   exportFiles: async (paths: string[]): Promise<void> => {
     const response = await fetch(`${API_BASE}/tools/export`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildHeaders(),
       body: JSON.stringify({ paths }),
     });
     if (!response.ok) throw new Error('Export failed');
@@ -202,6 +291,7 @@ export const importApi = {
     formData.append('file', file);
     const response = await fetch(`${API_BASE}/import/upload`, {
       method: 'POST',
+      headers: buildHeaders({}, false),
       body: formData,
     });
     if (!response.ok) {
@@ -223,7 +313,7 @@ export const importApi = {
     return new Promise((resolve, reject) => {
       fetch(`${API_BASE}/import-stream/execute`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildHeaders(),
         body: JSON.stringify(data),
       }).then(response => {
         if (!response.ok) {
@@ -300,7 +390,7 @@ export const importApi = {
   importJSON: (content: string, options: any) =>
     request<{ result: any }>('/import/import/json', { method: 'POST', body: { content, options } }),
   exportCSV: async (): Promise<void> => {
-    const response = await fetch(`${API_BASE}/import/export/csv`);
+    const response = await fetch(`${API_BASE}/import/export/csv`, { headers: buildHeaders({}, false) });
     if (!response.ok) throw new Error('Export failed');
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -311,7 +401,7 @@ export const importApi = {
     URL.revokeObjectURL(url);
   },
   exportJSON: async (): Promise<void> => {
-    const response = await fetch(`${API_BASE}/import/export/json`);
+    const response = await fetch(`${API_BASE}/import/export/json`, { headers: buildHeaders({}, false) });
     if (!response.ok) throw new Error('Export failed');
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -344,7 +434,11 @@ export const importApi = {
   uploadExtension: async (file: File): Promise<{ success: boolean; name: string; path: string; replaced: boolean; message: string }> => {
     const formData = new FormData();
     formData.append('file', file);
-    const res = await fetch(`${API_BASE}/import/extensions/upload`, { method: 'POST', body: formData });
+    const res = await fetch(`${API_BASE}/import/extensions/upload`, {
+      method: 'POST',
+      headers: buildHeaders({}, false),
+      body: formData,
+    });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Upload failed' }));
       throw new Error(err.error || 'Upload failed');
@@ -366,4 +460,96 @@ export const publishApi = {
     request<any>(`/publish/${targetId}/status/${publishId}`),
   listPublished: (targetId: string) =>
     request<{ published: any[] }>(`/publish/${targetId}/list`),
+};
+
+// ==================== Feedback API ====================
+
+export const feedbackApi = {
+  submit: (data: { skillName: string; skillPath: string; feedbackType: string; scenario: string; comment?: string; toolUsed: string; metadata?: Record<string, string> }) =>
+    request<{ feedback: any }>('/feedback', { method: 'POST', body: data }),
+  list: (skillPath?: string) =>
+    request<{ feedback: any[] }>(`/feedback${skillPath ? `?skillPath=${encodeURIComponent(skillPath)}` : ''}`),
+  getStats: () =>
+    request<{ stats: any[] }>('/feedback/stats'),
+  delete: (id: string) =>
+    request<{ success: boolean }>(`/feedback/${id}`, { method: 'DELETE' }),
+  clearAll: () =>
+    request<{ success: boolean }>('/feedback', { method: 'DELETE' }),
+};
+
+// ==================== Backup API ====================
+
+export const backupApi = {
+  exportBackup: async (): Promise<void> => {
+    const response = await fetch(`${API_BASE}/backup/export`, {
+      method: 'POST',
+      headers: buildHeaders({}, false),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Export failed' }));
+      throw new Error(err.error || 'Export failed');
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="([^"]+)"/);
+    const filename = match?.[1] || 'skills-manager-backup.zip';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  importBackup: async (file: File): Promise<{ success: boolean; message: string; previousDataDir?: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE}/backup/import`, {
+      method: 'POST',
+      headers: buildHeaders({}, false),
+      body: formData,
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Import failed' }));
+      throw new Error(err.error || 'Import failed');
+    }
+    return response.json();
+  },
+};
+
+// ==================== Fresh API ====================
+
+export const freshApi = {
+  check: (skillPath: string) =>
+    request<{ report: any }>('/fresh/check', { method: 'POST', body: { skillPath } }),
+  batchCheck: (skillPaths: string[]) =>
+    request<{ reports: any[] }>('/fresh/batch', { method: 'POST', body: { skillPaths } }),
+  // Server reads model creds from user config (SSRF / Bearer leak fix). Body
+  // shape only carries skillPath now.
+  getSuggestions: (data: { skillPath: string }) =>
+    request<any>('/fresh/suggestions', { method: 'POST', body: data }),
+};
+
+export const compareApi = {
+  compareSkills: (data: {
+    skillPathA: string;
+    skillPathB: string;
+    templateId?: string;
+    includeAI?: boolean;
+  }) =>
+    request<{ report: any }>('/compare/skills', { method: 'POST', body: data }),
+};
+
+export const lifecycleApi = {
+  // Batch-evaluates Rubric for the active source dir; server side knows the
+  // source dir and walks it. Empty body is intentional.
+  batchRubric: () =>
+    request<{ reports: { skillPath: string; score: number; grade: string }[] }>(
+      '/skill-rubric/batch',
+      { method: 'POST', body: {} },
+    ),
+};
+
+export const skillRubricApi = {
+  evaluate: (data: { skillPath: string; templateId?: string; includeAI?: boolean }) =>
+    request<{ report: any }>('/skill-rubric/evaluate', { method: 'POST', body: data }),
 };

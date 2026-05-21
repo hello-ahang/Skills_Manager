@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils'
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type Step = 'input' | 'chat' | 'preview'
+type QualityTier = 'mvp' | 'polished' | 'production'
 
 interface ChatMessage {
   role: 'assistant' | 'user'
@@ -53,7 +54,26 @@ interface AISkillGeneratorProps {
 
 // ─── System Prompt: skill-creator methodology ───────────────────────────────
 
-function buildSystemPrompt(skillName: string, userIdea: string): string {
+const QUALITY_TIER_CONFIG: Record<QualityTier, { label: string; description: string; targetScore: number }> = {
+  mvp: {
+    label: 'MVP（最小可用）',
+    description: '快速产出可用版本，满足基本结构要求即可。重点确保 name/description/SKILL.md 基本完整。',
+    targetScore: 60,
+  },
+  polished: {
+    label: '精打磨',
+    description: '在结构完整基础上注重描述质量和内容深度。description 需要精心打磨触发词和场景覆盖。',
+    targetScore: 75,
+  },
+  production: {
+    label: '生产级',
+    description: '最高品质标准。要求四维度全部优秀：结构完整、描述精准、内容深度充分、安全规范无死角。需要拆分 references/、提供丰富示例。',
+    targetScore: 90,
+  },
+}
+
+function buildSystemPrompt(skillName: string, userIdea: string, qualityTier: QualityTier = 'polished'): string {
+  const tierConfig = QUALITY_TIER_CONFIG[qualityTier]
   return `你是一个专业的 AI 编程技能生成器，基于 ahang-skill-creator 方法论工作。你帮助用户从零创建高质量的 Claude/Copilot 技能文件。
 
 ## 语言要求
@@ -208,6 +228,11 @@ description: 我可以帮你设计海报
 
 ${skillName ? `用户希望创建的技能名称：${skillName}\n` : ''}用户的需求描述：${userIdea}
 
+### 品质定位：${tierConfig.label}
+
+${tierConfig.description}
+目标质量分：≥ ${tierConfig.targetScore}（满分 100）。请根据此品质定位调整生成内容的深度和完整度。
+
 ### 第一轮对话：需求挖掘与架构蓝图
 
 分析用户的需求，主动补充用户可能遗漏的需求，生成一份**技能架构蓝图**：
@@ -304,6 +329,7 @@ export default function AISkillGenerator({
   // Input state
   const [idea, setIdea] = useState('')
   const [skillName, setSkillName] = useState('')
+  const [qualityTier, setQualityTier] = useState<QualityTier>('polished')
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -329,10 +355,10 @@ export default function AISkillGenerator({
   const buildApiMessages = useCallback((chatMessages: ChatMessage[]) => {
     const systemMsg = {
       role: 'system' as const,
-      content: buildSystemPrompt(skillName, idea),
+      content: buildSystemPrompt(skillName, idea, qualityTier),
     }
     return [systemMsg, ...chatMessages.map(m => ({ role: m.role, content: m.content }))]
-  }, [skillName, idea])
+  }, [skillName, idea, qualityTier])
 
   const callAI = useCallback(async (allMessages: ChatMessage[]) => {
     if (!defaultModel) throw new Error('请先在模型配置中设置默认模型')
@@ -551,6 +577,28 @@ export default function AISkillGenerator({
       toast.success(`技能「${folderName}」已创建，包含 ${generatedFiles.length} 个文件`)
       // Analytics: record ai-generate event (non-blocking)
       analyticsApi.recordEvent({ skillPath: `${sourceDir}/${folderName}`, skillName: folderName, eventType: 'ai-generate' }).catch(() => {})
+
+      // Auto Rubric evaluation after creation (non-blocking)
+      const tierConfig = QUALITY_TIER_CONFIG[qualityTier]
+      fetch('/api/skill-rubric/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skillPath: skillDir }),
+      })
+        .then(res => res.ok ? res.json() : Promise.reject())
+        .then(data => {
+          const score = data?.report?.score
+          const grade = data?.report?.grade
+          if (score !== undefined) {
+            if (score >= tierConfig.targetScore) {
+              toast.success(`Rubric 评测通过：${grade} 级（${score} 分），达到${tierConfig.label}目标 ≥${tierConfig.targetScore}`)
+            } else {
+              toast.warning(`Rubric 评测：${grade} 级（${score} 分），未达${tierConfig.label}目标 ≥${tierConfig.targetScore}，建议在健康度面板中优化`)
+            }
+          }
+        })
+        .catch(() => { /* silent */ })
+
       onSuccess?.()
       handleClose()
     } catch (error) {
@@ -558,13 +606,14 @@ export default function AISkillGenerator({
     } finally {
       setSaving(false)
     }
-  }, [generatedFiles, skillName, sourceDir, onSuccess])
+  }, [generatedFiles, skillName, sourceDir, onSuccess, qualityTier])
 
   // Close and reset
   const handleClose = useCallback(() => {
     setStep('input')
     setIdea('')
     setSkillName('')
+    setQualityTier('polished')
     setMessages([])
     setUserInput('')
     setSending(false)
@@ -617,6 +666,33 @@ export default function AISkillGenerator({
                 value={skillName}
                 onChange={(e) => setSkillName(e.target.value)}
               />
+            </div>
+
+            {/* Quality Tier */}
+            <div className="space-y-2">
+              <Label>品质定位</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { id: 'mvp' as QualityTier, label: 'MVP', desc: '快速可用', score: '≥60' },
+                  { id: 'polished' as QualityTier, label: '精打磨', desc: '描述精准', score: '≥75' },
+                  { id: 'production' as QualityTier, label: '生产级', desc: '四维满分', score: '≥90' },
+                ]).map(tier => (
+                  <button
+                    key={tier.id}
+                    type="button"
+                    className={cn(
+                      'flex flex-col items-center gap-0.5 rounded-lg border-2 px-3 py-2 text-xs transition-colors cursor-pointer',
+                      qualityTier === tier.id
+                        ? 'border-primary bg-primary/5 text-primary'
+                        : 'border-muted hover:border-muted-foreground/30'
+                    )}
+                    onClick={() => setQualityTier(tier.id)}
+                  >
+                    <span className="font-medium">{tier.label}</span>
+                    <span className="text-[10px] text-muted-foreground">{tier.desc}（{tier.score}）</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Idea Description */}

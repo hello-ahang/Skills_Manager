@@ -7,6 +7,133 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.0] - 2026-05-13
+
+### Security — 关键漏洞修复（P0）
+
+- **API 鉴权**：所有 `/api/*` 端点现在要求 `X-SM-Token` header 或 `?token=` 查询参数。token 在首次启动时自动生成并写入 `~/.skills-manager/security.json`（chmod 0600），CLI 启动时会打印 token 并自动拼到打开浏览器的 URL 中。删除 `security.json` 即可重置。
+- **监听地址默认 127.0.0.1**：服务器不再绑定 `0.0.0.0`，避免暴露到局域网。如需自定义请用 `SM_HOST` 环境变量。
+- **CORS 收紧**：仅允许 `http://127.0.0.1:{3001,5173,5174}`（及 localhost 等价项）来源；不再使用 `cors()` 默认全开放配置。
+- **helmet 安全头**：添加 helmet 中间件提供常见安全响应头。
+- **路径白名单**：所有 `/api/skills/*` 文件操作（read/write/rename/delete/folder-contents）现通过 `pathGuard` 中间件校验路径必须在用户配置的 sourceDirs / projects / `~/.skills-manager` 之内。`/etc/passwd` 类越界访问返回 403。
+- **扩展上传沙箱化**：`/api/import/extensions/upload` 强制对 `originalname` 调用 `path.basename` + 字符校验，仅允许 `.js` / `.mjs`，写入路径必须在 `~/.skills-manager/extensions/` 之内。multer fileFilter 错误返回 400 而非 500。
+- **ZipSlip 防护**：所有 ZIP 解压改走新增的 `safeUnzip` 工具，按 entry 校验解压目标路径不会逃逸 extractDir，covers GitHub/Gitee/GitLab/ClawHub/Bitbucket 仓库下载、ZIP 导入、备份恢复全路径。
+
+### Reliability — 数据完整性
+
+- **版本快照保留二进制文件**：`VersionFile` 新增 `encoding: 'utf-8' | 'base64'` 字段。`createVersion` 自动检测二进制文件并以 base64 存储，`restoreVersion` 按 encoding 还原；diff 视图对二进制文件展示 `binary` 状态。修复了之前回滚后 PNG/字体/zip 被静默丢失的 bug。
+- **JSONL → SQLite**：analyticsService 与 feedbackService 改用 `better-sqlite3`（WAL 模式 + 单事务）持久化，消除并发写时的半行 JSON 损坏。启动时自动从旧 `events.jsonl` / `feedback.jsonl` 一次性导入到 `~/.skills-manager/db.sqlite`，旧文件重命名为 `.bak-*` 保留。
+
+### Added
+
+- **数据备份与恢复**：HomePage 新增「导出全量备份」和「从备份恢复」按钮。后端 `POST /api/backup/export` 流式导出 `~/.skills-manager/`（自动排除 `security.json`），`POST /api/backup/import` 通过 safeUnzip 解压并替换数据，恢复前自动备份当前数据为 `~/.skills-manager.bak-*`。
+- **ClawHub 检索 Tab 启用**：SkillsRadar 的 ClawHub Tab 不再是 `alert("开发中")`，现支持输入 ClawHub 仓库地址扫描 Skills，并跳转到导入中心完成导入。
+- **结构化日志**：新增 `server/utils/logger.ts`（pino + pino-pretty）。开发模式彩色易读，生产 JSON。可通过 `LOG_LEVEL` 环境变量控制级别。
+
+### Changed
+
+- 启动顺序：ensureToken → migrateLegacyJsonl → loadExtensions → listen。
+- CLI 启动信息现在会显示访问令牌和带 token 的 URL，便于复制。
+- `server/cli.ts` 的浏览器打开命令从 `exec(\`open "${url}"\`)` 改为 `spawn` + 数组参数，规避未来潜在的命令注入。
+
+### Tests
+
+- 新增 `vitest` 测试框架，44 个测试覆盖：
+  - `server/utils/validation.test.ts` — 路径校验各种 traversal payload
+  - `server/utils/safeUnzip.test.ts` — ZipSlip 防护核心判断 + 端到端解压
+  - `server/middleware/auth.test.ts` — 鉴权中间件豁免 / 401 / 正确 token 路径
+  - `server/services/versionService.test.ts` — 含 PNG 的 Skill 回滚 / 二进制 diff
+  - `server/services/analyticsService.test.ts` — 100 并发写 + 元数据完整性
+- `npm test` 一键运行。
+
+### Migration Notes
+
+- 升级后首次启动会创建 `~/.skills-manager/security.json` 并显示 token；如果脚本化对接 API，请在所有请求加 `X-SM-Token` header。
+- 旧 JSONL 数据会自动迁移到 SQLite，原文件保留为 `.bak-*`。无需手工操作。
+- 如需远程访问（不推荐），设置 `SM_HOST=0.0.0.0` 并通过反向代理 + token 鉴权使用。
+
+---
+
+## [2.0.0] - 2026-04-28
+
+### Added — Skill Harness 平台完整闭环（v1.5 ~ v2.0，8 大模块）
+
+#### v1.5 — Rubric 评测体系 + 评测改进循环
+
+##### 模块 1：Rubric 四维评测引擎
+
+- **结构化评测**：四维度加权评分系统（L1 结构完整性 × 0.30 / L2 描述质量 × 0.30 / L3 内容深度 × 0.25 / L4 安全规范 × 0.15），输出 0-100 分 + A/B/C/D/F 等级
+- **AI 评估集成**：description 质量评估、内容深度评估（可选调用 LLM）
+- **自定义 Rubric 模板**：支持团队定义自己的评测标准，存储到 `~/.skills-manager/rubric-templates/`
+- **UI 升级**：健康度弹框从单一评分卡改为四维雷达图 + 逐项 Rubric 报告
+- **新增 API**：`POST /api/skill-rubric/evaluate`、`POST /api/skill-rubric/batch`、`GET /api/skill-rubric/templates`、`PUT /api/skill-rubric/templates`
+- **新增文件**：`server/services/rubricService.ts`、`server/routes/skill-rubric.ts`
+
+##### 模块 2：评测-改进循环（Eval Loop）
+
+- **自动化循环**：Rubric 评测 → AI 分析薄弱维度 → AI 生成优化版本 → 自动创建版本快照 → 再评测
+- **退出条件自适应**：达到目标分 / 达到最大轮次 / 连续两轮提升 < 2 分
+- **SSE 实时进度**：前端实时展示当前轮次、评分变化、改进内容
+- **评分趋势图**：折线图展示每轮评分变化
+- **历史持久化**：存储到 `~/.skills-manager/eval-loop-history.json`
+- **新增 API**：`POST /api/eval-loop/start`（SSE）、`POST /api/eval-loop/stop`、`GET /api/eval-loop/history`、`GET /api/eval-loop/active`
+- **新增文件**：`server/services/evalLoopService.ts`、`server/routes/eval-loop.ts`、`src/components/skills/EvalLoopPanel.tsx`
+
+#### v1.6 — 场景匹配增强 + 质量排名
+
+##### 模块 3：智能推荐排名
+
+- **综合排名算法**：语义匹配度 × 0.6 + Rubric 质量分 × 0.3 + 使用热度 × 0.1
+- **质量分徽章**：搜索结果卡片展示 A/B/C/D/F 等级徽章和使用频次
+- **等级筛选器**：按质量等级筛选搜索结果
+- **修改文件**：`server/services/radarService.ts`、`src/pages/SkillsRadarPage.tsx`
+
+##### 模块 4：Skill 对比评测
+
+- **并排对比**：选择两个 Skill 进行 Rubric 对比评测
+- **可视化对比**：并排雷达图 + 内容 Diff + 触发率对比
+- **新增文件**：`server/services/compareService.ts`、`src/components/skills/SkillComparePanel.tsx`
+
+#### v1.7 — 使用记忆 + 自动保鲜
+
+##### 模块 5：使用反馈采集
+
+- **反馈类型**：有效 / 无效 / 部分有效 / 建议四种反馈类型
+- **JSONL 存储**：`~/.skills-manager/feedback.jsonl`，高性能追加写入
+- **快捷反馈**：Skills 库文件树右键菜单一键提交反馈
+- **反馈统计**：使用分析页新增 FeedbackStatsCard 组件（总反馈数、有效率、Top 5 排行）
+- **新增 API**：`POST /api/feedback`、`GET /api/feedback`、`GET /api/feedback/stats`、`DELETE /api/feedback/:id`、`DELETE /api/feedback`
+- **新增文件**：`server/services/feedbackService.ts`、`server/routes/feedback.ts`
+
+##### 模块 6：自动保鲜机制
+
+- **四维检测**：URL 有效性（HEAD 请求）、引用路径存在性、反馈趋势分析、最后修改时间（90 天阈值）
+- **保鲜等级**：fresh（绿）/ stale（黄）/ expired（红），文件树保鲜度指示器圆点
+- **AI 保鲜建议**：分析过期内容并生成具体改进建议
+- **自动批量检测**：页面加载后自动获取保鲜度数据，localStorage 缓存
+- **新增 API**：`POST /api/fresh/check`、`POST /api/fresh/batch`、`POST /api/fresh/suggestions`
+- **新增文件**：`server/services/freshService.ts`、`server/routes/fresh.ts`
+
+#### v2.0 — Skill Harness 完整闭环
+
+##### 模块 7：生命周期看板
+
+- **6 阶段看板**：草稿 → 评测中 → 已发布 → 使用中 → 待优化 → 已归档
+- **智能推断**：根据质量分、反馈数据、保鲜度自动推断 Skill 所处阶段
+- **数据聚合**：每个 Skill 卡片展示质量分徽章 + 反馈数 + 保鲜度指示器
+- **阶段切换**：下拉菜单切换阶段，localStorage 持久化用户覆盖
+- **新增文件**：`src/pages/LifecyclePage.tsx`
+- **修改文件**：`src/components/layout/Sidebar.tsx`（新增导航项）、`src/App.tsx`（注册路由）
+
+##### 模块 8：创建流程增强（品质锚定）
+
+- **品质定位**：AI 生成 Skill 时选择品质定位（MVP ≥60 / 精打磨 ≥75 / 生产级 ≥90）
+- **品质注入**：品质定位信息注入 AI 系统提示，影响生成内容的深度和完整度
+- **自动评测**：生成后自动触发 Rubric 评测，对比目标分并 toast 提示结果
+- **修改文件**：`src/components/skills/AISkillGenerator.tsx`
+
+---
+
 ## [1.4.2] - 2026-04-27
 
 ### Fixed

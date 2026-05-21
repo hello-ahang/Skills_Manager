@@ -7,7 +7,8 @@ import {
   saveRubricTemplate,
   getDefaultRubricTemplate,
 } from '../services/rubricService.js';
-import { getConfig } from '../services/configService.js';
+import { getConfig, getDefaultModelConfig } from '../services/configService.js';
+import { updateRubricCacheEntry } from '../services/radarService.js';
 
 async function getActiveSourceDir(): Promise<string> {
   const config = await getConfig();
@@ -18,12 +19,16 @@ const router = Router();
 
 /**
  * POST /api/skill-rubric/evaluate
- * Body: { skillPath: string, templateId?: string, includeAI?: boolean, baseUrl?: string, apiKey?: string, modelName?: string }
+ * Body: { skillPath: string, templateId?: string, includeAI?: boolean }
  * Evaluate a single skill using rubric and return report.
+ *
+ * AI model creds are read server-side from user config; never accepted from
+ * the request body (SSRF + Authorization header leak — same threat model
+ * fixed in compare/fresh).
  */
 router.post('/evaluate', async (req: Request, res: Response) => {
   try {
-    const { skillPath, templateId, includeAI, baseUrl, apiKey, modelName } = req.body || {};
+    const { skillPath, templateId, includeAI } = req.body || {};
     if (!skillPath || typeof skillPath !== 'string') {
       res.status(400).json({ error: 'skillPath is required' });
       return;
@@ -38,15 +43,23 @@ router.post('/evaluate', async (req: Request, res: Response) => {
       return;
     }
 
-    const aiModelConfig = (includeAI && baseUrl && apiKey && modelName)
-      ? { baseUrl, apiKey, modelName }
-      : undefined;
+    const aiModelConfig = includeAI ? (await getDefaultModelConfig()) ?? undefined : undefined;
 
     const skillName = path.basename(absPath);
     const report = await evaluateSkill(skillName, absPath, {
       templateId: templateId || undefined,
       aiModelConfig,
     });
+
+    // Auto-update Rubric cache for radar ranking
+    if (report && report.overallScore != null && report.grade) {
+      updateRubricCacheEntry(skillName, {
+        grade: report.grade,
+        score: report.overallScore,
+        evaluatedAt: report.evaluatedAt || new Date().toISOString(),
+      }).catch(() => { /* silent */ });
+    }
+
     res.json({ report });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Rubric evaluation failed';
@@ -56,13 +69,15 @@ router.post('/evaluate', async (req: Request, res: Response) => {
 
 /**
  * POST /api/skill-rubric/batch
- * Body: { sourceDirPath?: string, templateId?: string, includeAI?: boolean, baseUrl?: string, apiKey?: string, modelName?: string }
+ * Body: { sourceDirPath?: string, templateId?: string, includeAI?: boolean }
  * Evaluate all top-level skill directories in source dir using rubric.
  * AI evaluation is optional, concurrency limited to 3.
+ *
+ * AI creds are read server-side (same SSRF defense as /evaluate above).
  */
 router.post('/batch', async (req: Request, res: Response) => {
   try {
-    const { sourceDirPath, templateId, includeAI, baseUrl, apiKey, modelName } = req.body || {};
+    const { sourceDirPath, templateId, includeAI } = req.body || {};
     const baseDir = sourceDirPath || (await getActiveSourceDir());
 
     if (!baseDir || !await fs.pathExists(baseDir)) {
@@ -70,9 +85,7 @@ router.post('/batch', async (req: Request, res: Response) => {
       return;
     }
 
-    const aiModelConfig = (includeAI && baseUrl && apiKey && modelName)
-      ? { baseUrl, apiKey, modelName }
-      : undefined;
+    const aiModelConfig = includeAI ? (await getDefaultModelConfig()) ?? undefined : undefined;
 
     const entries = await fs.readdir(baseDir, { withFileTypes: true });
 

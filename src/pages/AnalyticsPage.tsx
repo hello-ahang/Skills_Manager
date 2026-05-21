@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { analyticsApi, importApi } from '@/api/client'
+import { analyticsApi, importApi, feedbackApi } from '@/api/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -35,6 +35,10 @@ import {
   Zap,
   Trash2,
   RefreshCw,
+  MessageSquarePlus,
+  ThumbsUp,
+  ThumbsDown,
+  Lightbulb,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { AnalyticsDashboard, AnalyticsEvent, ImportStats } from '@/types'
@@ -94,6 +98,97 @@ function ImportStatsCard() {
                   className="h-full rounded-full bg-primary transition-all"
                   style={{ width: `${(item.count / maxCount) * 100}%` }}
                 />
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// Feedback Stats Card component
+function FeedbackStatsCard() {
+  const [stats, setStats] = useState<{ skillName: string; skillPath: string; total: number; effective: number; ineffective: number; partial: number; suggestion: number; effectiveRate: number }[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    feedbackApi.getStats()
+      .then(res => setStats(res.stats || []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading || stats.length === 0) return null
+
+  const totalFeedback = stats.reduce((sum, s) => sum + s.total, 0)
+  const totalEffective = stats.reduce((sum, s) => sum + s.effective, 0)
+  const totalIneffective = stats.reduce((sum, s) => sum + s.ineffective, 0)
+  const totalSuggestion = stats.reduce((sum, s) => sum + s.suggestion, 0)
+  const overallRate = totalFeedback > 0
+    ? Math.round((totalEffective / (totalEffective + totalIneffective + stats.reduce((s, x) => s + x.partial, 0))) * 100)
+    : 0
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <MessageSquarePlus className="h-4 w-4" />
+          使用反馈统计
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-4 gap-3 mb-4">
+          <div className="text-center">
+            <div className="text-xl font-bold">{totalFeedback}</div>
+            <div className="text-xs text-muted-foreground">总反馈</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xl font-bold text-green-600 flex items-center justify-center gap-1">
+              <ThumbsUp className="h-3.5 w-3.5" />{totalEffective}
+            </div>
+            <div className="text-xs text-muted-foreground">有效</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xl font-bold text-red-600 flex items-center justify-center gap-1">
+              <ThumbsDown className="h-3.5 w-3.5" />{totalIneffective}
+            </div>
+            <div className="text-xs text-muted-foreground">无效</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xl font-bold text-blue-600 flex items-center justify-center gap-1">
+              <Lightbulb className="h-3.5 w-3.5" />{totalSuggestion}
+            </div>
+            <div className="text-xs text-muted-foreground">建议</div>
+          </div>
+        </div>
+
+        {overallRate > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-muted-foreground">总体有效率</span>
+              <span className="font-medium">{overallRate}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full bg-green-500 transition-all"
+                style={{ width: `${overallRate}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {stats.slice(0, 5).map((stat) => (
+            <div key={stat.skillPath} className="flex items-center justify-between text-xs">
+              <span className="truncate flex-1 mr-2">{stat.skillName}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-green-600">{stat.effective}</span>
+                <span className="text-muted-foreground">/</span>
+                <span className="text-red-600">{stat.ineffective}</span>
+                <Badge variant={stat.effectiveRate >= 70 ? 'default' : stat.effectiveRate >= 40 ? 'secondary' : 'destructive'} className="text-[10px] h-4 px-1.5">
+                  {stat.effectiveRate}%
+                </Badge>
               </div>
             </div>
           ))}
@@ -284,6 +379,9 @@ export default function AnalyticsPage() {
 
       {/* Import Stats Card */}
       <ImportStatsCard />
+
+      {/* Feedback Stats Card */}
+      <FeedbackStatsCard />
 
       {/* Main Content: Skills Ranking + Recent Activity */}
       <div className="grid grid-cols-5 gap-6">

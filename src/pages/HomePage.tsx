@@ -1,11 +1,16 @@
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
+import { backupApi } from '@/api/client'
 import {
   AlertTriangle,
   BarChart3,
   Download,
   GitBranch,
+  HardDriveDownload,
+  HardDriveUpload,
   Lightbulb,
   Palette,
   Pencil,
@@ -18,6 +23,47 @@ import {
 
 export default function HomePage() {
   const navigate = useNavigate()
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+
+  const handleExport = async () => {
+    if (isExporting) return
+    setIsExporting(true)
+    try {
+      await backupApi.exportBackup()
+      toast.success('备份已开始下载')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '导出失败'
+      toast.error(message)
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  const handleImportClick = () => {
+    if (isImporting) return
+    fileInputRef.current?.click()
+  }
+
+  const handleImportChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!confirm(`确定从 "${file.name}" 恢复数据吗？\n\n当前 ~/.skills-manager/ 会被自动备份为 .bak-* 目录。`)) {
+      return
+    }
+    setIsImporting(true)
+    try {
+      const result = await backupApi.importBackup(file)
+      toast.success(result.message || '已恢复，请重启 Skills Manager')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '导入失败'
+      toast.error(message)
+    } finally {
+      setIsImporting(false)
+    }
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-3">
@@ -161,6 +207,36 @@ export default function HomePage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 数据备份与恢复 */}
+      <Card>
+        <CardContent className="pt-3 pb-3">
+          <div className="flex items-center gap-2 mb-2">
+            <HardDriveDownload className="h-3.5 w-3.5 text-primary" />
+            <span className="text-xs font-semibold">数据备份与恢复</span>
+          </div>
+          <p className="text-[11px] text-muted-foreground mb-2">
+            将 ~/.skills-manager/ 下的版本/反馈/评测/订阅等数据打包导出，或从备份恢复（导入会自动备份当前数据为 .bak-* 目录）。
+          </p>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={handleExport} disabled={isExporting} className="gap-1.5">
+              <HardDriveDownload className="h-3.5 w-3.5" />
+              {isExporting ? '导出中…' : '导出全量备份'}
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleImportClick} disabled={isImporting} className="gap-1.5">
+              <HardDriveUpload className="h-3.5 w-3.5" />
+              {isImporting ? '恢复中…' : '从备份恢复'}
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".zip"
+              className="hidden"
+              onChange={handleImportChange}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Quick Actions */}
       <div className="flex items-center justify-center gap-3">

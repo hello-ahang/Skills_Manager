@@ -61,10 +61,10 @@ router.post('/start', async (req: Request, res: Response) => {
       }
     });
 
-    const result = await startEvalLoop(config, aiModelConfig, (round) => {
+    const result = await startEvalLoop(config, aiModelConfig, (round, currentLoopId) => {
       if (aborted) return;
-      if (!loopId && round.loopId) {
-        loopId = round.loopId;
+      if (!loopId) {
+        loopId = currentLoopId;
       }
       res.write(`event: round\ndata: ${JSON.stringify(round)}\n\n`);
     });

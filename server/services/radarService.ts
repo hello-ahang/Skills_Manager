@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import { getConfig } from './configService.js';
 import { getHistory } from './importHistoryService.js';
+import { getDb } from '../db/sqlite.js';
 import type { SkillVersion } from '../../src/types/index.js';
 import { parseYamlField } from '../utils/yamlUtils.js';
 
@@ -25,6 +26,9 @@ export interface RadarSkillItem {
   version?: string;
   tags?: string[];
   category?: string;
+  rubricGrade?: 'A' | 'B' | 'C' | 'D' | 'F';
+  rubricScore?: number;  // 0-100
+  usageCount?: number;
 }
 
 /**
@@ -126,13 +130,17 @@ async function scanDirForSkills(
 /**
  * Aggregate all Skills from all Skills library directories (sourceDirs).
  */
-export async function aggregateAllSkills(): Promise<RadarSkillItem[]> {
+export async function aggregateAllSkills(sourceDirId?: string): Promise<RadarSkillItem[]> {
   const config = await getConfig();
   const allSkills: RadarSkillItem[] = [];
 
-  // Scan ALL source directories (Skills libraries)
+  // Scan source directories (Skills libraries)
   if (config.sourceDirs && config.sourceDirs.length > 0) {
-    for (const dir of config.sourceDirs) {
+    const dirsToScan = sourceDirId
+      ? config.sourceDirs.filter((d: { id: string }) => d.id === sourceDirId)
+      : config.sourceDirs;
+
+    for (const dir of dirsToScan) {
       const dirPath = dir.path.startsWith('~/') || dir.path === '~'
         ? path.join(os.homedir(), dir.path.slice(1))
         : dir.path;
@@ -189,31 +197,39 @@ export async function aggregateAllSkills(): Promise<RadarSkillItem[]> {
     // Versions index not available
   }
 
-  // Match version to skills by path (try both original path and realpath)
-  for (const skill of allSkills) {
-    if (skill.path) {
-      const ver = latestVersionMap.get(skill.path);
-      if (ver) {
-        skill.version = ver;
-      } else {
-        // Try resolving realpath to match
-        try {
-          const realPath = await fs.realpath(skill.path);
-          for (const [vPath, vVer] of latestVersionMap) {
-            try {
-              const vRealPath = await fs.realpath(vPath);
-              if (vRealPath === realPath) {
-                skill.version = vVer;
-                break;
-              }
-            } catch {
-              // skip
-            }
-          }
-        } catch {
-          // skip
+  // Pre-compute realpath → version once, so the inner skill loop is O(1).
+  // The previous double-loop with per-iteration fs.realpath was O(N·M)
+  // syscalls — 10k+ syscalls for a library with ~100 skills × 100 versions.
+  const versionByRealPath = new Map<string, string>();
+  await Promise.all(
+    Array.from(latestVersionMap.entries()).map(async ([vPath, vVer]) => {
+      try {
+        const real = await fs.realpath(vPath);
+        // Only set if not already set (first wins; latestVersionMap order is
+        // unspecified, but conflicts are rare and tied versions are equivalent).
+        if (!versionByRealPath.has(real)) {
+          versionByRealPath.set(real, vVer);
         }
+      } catch {
+        // skip unreachable version paths
       }
+    }),
+  );
+
+  // Match version to skills by path (exact first, then resolved realpath).
+  for (const skill of allSkills) {
+    if (!skill.path) continue;
+    const ver = latestVersionMap.get(skill.path);
+    if (ver) {
+      skill.version = ver;
+      continue;
+    }
+    try {
+      const realPath = await fs.realpath(skill.path);
+      const realVer = versionByRealPath.get(realPath);
+      if (realVer) skill.version = realVer;
+    } catch {
+      // skip
     }
   }
 
@@ -262,6 +278,21 @@ export async function aggregateAllSkills(): Promise<RadarSkillItem[]> {
       realPathMap.set(realPath, skill);
       deduped.push(skill);
     }
+  }
+
+  // ── Enrich with Rubric scores and usage stats ──
+  const [rubricCache, usageStats] = await Promise.all([
+    loadRubricCache(),
+    loadUsageStats(),
+  ]);
+
+  for (const skill of deduped) {
+    const rubric = rubricCache[skill.name];
+    if (rubric) {
+      skill.rubricGrade = rubric.grade;
+      skill.rubricScore = rubric.score;
+    }
+    skill.usageCount = usageStats[skill.name] || 0;
   }
 
   return deduped;
@@ -331,4 +362,143 @@ export async function loadRadarSummary(): Promise<any | null> {
 export async function saveRadarSummary(summary: any): Promise<void> {
   await fs.ensureDir(USER_CONFIG_DIR);
   await fs.writeJson(RADAR_SUMMARY_PATH, summary, { spaces: 2 });
+}
+
+// ==================== Rubric Score Cache (SQLite-backed) ====================
+//
+// Backed by `rubric_cache` table in ~/.skills-manager/db.sqlite. Reads/writes
+// go through better-sqlite3 (synchronous), so concurrent route handlers can
+// no longer drop updates the way the previous JSON RMW pattern did.
+
+export interface RubricCacheEntry {
+  grade: 'A' | 'B' | 'C' | 'D' | 'F';
+  score: number;  // 0-100
+  evaluatedAt: string;
+}
+
+interface RubricCacheRow {
+  skill_name: string;
+  grade: string;
+  score: number;
+  evaluated_at: string;
+}
+
+function rowToRubricEntry(row: RubricCacheRow): RubricCacheEntry {
+  return {
+    grade: row.grade as RubricCacheEntry['grade'],
+    score: row.score,
+    evaluatedAt: row.evaluated_at,
+  };
+}
+
+/**
+ * Load cached Rubric scores. Returns a map: skillName → entry.
+ */
+export async function loadRubricCache(): Promise<Record<string, RubricCacheEntry>> {
+  const db = getDb();
+  const rows = db.prepare('SELECT skill_name, grade, score, evaluated_at FROM rubric_cache').all() as RubricCacheRow[];
+  const out: Record<string, RubricCacheEntry> = {};
+  for (const row of rows) {
+    out[row.skill_name] = rowToRubricEntry(row);
+  }
+  return out;
+}
+
+/**
+ * Replace the entire Rubric cache (used by full-refresh flows).
+ */
+export async function saveRubricCache(cache: Record<string, RubricCacheEntry>): Promise<void> {
+  const db = getDb();
+  const upsert = db.prepare(
+    `INSERT INTO rubric_cache (skill_name, grade, score, evaluated_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(skill_name) DO UPDATE SET
+       grade = excluded.grade,
+       score = excluded.score,
+       evaluated_at = excluded.evaluated_at`
+  );
+  const tx = db.transaction((entries: [string, RubricCacheEntry][]) => {
+    db.prepare('DELETE FROM rubric_cache').run();
+    for (const [name, entry] of entries) {
+      upsert.run(name, entry.grade, Math.round(entry.score), entry.evaluatedAt);
+    }
+  });
+  tx(Object.entries(cache));
+}
+
+/**
+ * Update a single entry in the Rubric cache. Atomic via UPSERT — concurrent
+ * callers may interleave but never lose data.
+ */
+export async function updateRubricCacheEntry(skillName: string, entry: RubricCacheEntry): Promise<void> {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO rubric_cache (skill_name, grade, score, evaluated_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(skill_name) DO UPDATE SET
+       grade = excluded.grade,
+       score = excluded.score,
+       evaluated_at = excluded.evaluated_at`
+  ).run(skillName, entry.grade, Math.round(entry.score), entry.evaluatedAt);
+}
+
+// ==================== Usage Stats (SQLite-backed) ====================
+//
+// Concurrent /api/radar/usage/increment used to drop counts under the JSON
+// RMW pattern; SQLite UPSERT guarantees correctness.
+
+interface UsageStatsRow {
+  skill_name: string;
+  count: number;
+  last_used_at: string;
+}
+
+/**
+ * Load usage stats. Returns a map: skillName → count.
+ */
+export async function loadUsageStats(): Promise<Record<string, number>> {
+  const db = getDb();
+  const rows = db.prepare('SELECT skill_name, count FROM usage_stats').all() as Pick<UsageStatsRow, 'skill_name' | 'count'>[];
+  const out: Record<string, number> = {};
+  for (const row of rows) {
+    out[row.skill_name] = row.count;
+  }
+  return out;
+}
+
+/**
+ * Replace the entire usage stats table (used by import/export flows).
+ */
+export async function saveUsageStats(stats: Record<string, number>): Promise<void> {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const upsert = db.prepare(
+    `INSERT INTO usage_stats (skill_name, count, last_used_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(skill_name) DO UPDATE SET
+       count = excluded.count,
+       last_used_at = excluded.last_used_at`
+  );
+  const tx = db.transaction((entries: [string, number][]) => {
+    db.prepare('DELETE FROM usage_stats').run();
+    for (const [name, count] of entries) {
+      upsert.run(name, count, now);
+    }
+  });
+  tx(Object.entries(stats));
+}
+
+/**
+ * Atomically increment usage count for a skill (UPSERT prevents lost updates
+ * under concurrent requests).
+ */
+export async function incrementUsage(skillName: string): Promise<void> {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO usage_stats (skill_name, count, last_used_at)
+     VALUES (?, 1, ?)
+     ON CONFLICT(skill_name) DO UPDATE SET
+       count = count + 1,
+       last_used_at = excluded.last_used_at`
+  ).run(skillName, new Date().toISOString());
 }

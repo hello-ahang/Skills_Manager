@@ -288,6 +288,7 @@ export interface VersionFile {
   relativePath: string;
   content: string;
   size: number;
+  encoding?: 'utf-8' | 'base64';
 }
 
 export interface VersionDetail {
@@ -301,9 +302,10 @@ export interface VersionDetail {
 
 export interface VersionDiff {
   relativePath: string;
-  status: 'added' | 'removed' | 'modified' | 'unchanged';
+  status: 'added' | 'removed' | 'modified' | 'unchanged' | 'binary';
   currentContent?: string;
   versionContent?: string;
+  isBinary?: boolean;
 }
 
 // ==================== Analytics ====================
@@ -343,6 +345,34 @@ export interface AnalyticsDashboard {
   };
   skillStats: SkillUsageStats[];
   recentActivity: AnalyticsEvent[];
+}
+
+// ==================== Skill Feedback ====================
+
+export type FeedbackType = 'effective' | 'ineffective' | 'partial' | 'suggestion';
+
+export interface SkillFeedback {
+  id: string;
+  skillName: string;
+  skillPath: string;
+  feedbackType: FeedbackType;
+  scenario: string;              // 使用场景描述
+  comment?: string;              // 用户反馈说明
+  toolUsed: string;              // 使用的 AI 工具（Claude/Cursor 等）
+  timestamp: string;
+  metadata?: Record<string, string>;
+}
+
+export interface FeedbackStats {
+  skillName: string;
+  skillPath: string;
+  total: number;
+  effective: number;
+  ineffective: number;
+  partial: number;
+  suggestion: number;
+  effectiveRate: number;         // effective / (effective + ineffective + partial)
+  lastFeedbackAt?: string;
 }
 
 // ==================== API Request/Response Types ====================

@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -18,17 +19,75 @@ import skillLintRouter from './routes/skill-lint.js';
 import sandboxRouter from './routes/sandbox.js';
 import skillRubricRouter from './routes/skill-rubric.js';
 import evalLoopRouter from './routes/eval-loop.js';
+import compareRouter from './routes/compare.js';
+import feedbackRouter from './routes/feedback.js';
+import freshRouter from './routes/fresh.js';
+import backupRouter from './routes/backup.js';
 import { loadExtensions } from './extensions.js';
+import { authMiddleware, ensureToken } from './middleware/auth.js';
+import { pathGuard } from './middleware/pathGuard.js';
+import { rateLimit } from './middleware/rateLimit.js';
+import { migrateLegacyJsonl } from './db/sqlite.js';
+import { log } from './utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const port = process.env.PORT || 3001;
+const port = Number(process.env.PORT || 3001);
+const host = process.env.SM_HOST || '127.0.0.1';
 
-// Middleware
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+const isDev = process.env.NODE_ENV !== 'production';
+
+const allowedOrigins = new Set<string>([
+  `http://127.0.0.1:${port}`,
+  `http://localhost:${port}`,
+  'http://127.0.0.1:5173',
+  'http://localhost:5173',
+  'http://127.0.0.1:5174',
+  'http://localhost:5174',
+]);
+
+const LOCAL_ORIGIN_RE = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/;
+
+function isOriginAllowed(origin: string): boolean {
+  if (allowedOrigins.has(origin)) return true;
+  // In dev, accept any localhost/127.0.0.1 origin (port may vary)
+  if (isDev && LOCAL_ORIGIN_RE.test(origin)) return true;
+  return false;
+}
+
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (isOriginAllowed(origin)) return cb(null, true);
+      log.warn({ origin }, '[CORS] rejected origin');
+      // Return false (not error) so the request fails silently at the browser
+      // without polluting the server error handler
+      return cb(null, false);
+    },
+    credentials: false,
+    allowedHeaders: ['Content-Type', 'X-SM-Token'],
+  })
+);
+// 50mb was a DoS vector for global JSON parsing. Most endpoints take small
+// payloads; specialized routes (e.g. backup import) use multipart, not JSON.
+app.use(express.json({ limit: '1mb' }));
+app.use(authMiddleware);
+app.use('/api', pathGuard());
+
+// Rate limits — per-IP, in-memory. Tighter caps on routes that fan out to
+// outbound HTTP (fresh) or do heavy disk work (backup import/export).
+app.use('/api', rateLimit({ max: 300, windowMs: 60_000 }));
+app.use('/api/fresh', rateLimit({ max: 10, windowMs: 60_000, message: 'Freshness checks are rate-limited; try again shortly.' }));
+app.use('/api/backup', rateLimit({ max: 5, windowMs: 60_000, message: 'Backup operations are rate-limited.' }));
 
 // API Routes
 app.use('/api/config', configRouter);
@@ -46,6 +105,10 @@ app.use('/api/skill-lint', skillLintRouter);
 app.use('/api/sandbox', sandboxRouter);
 app.use('/api/skill-rubric', skillRubricRouter);
 app.use('/api/eval-loop', evalLoopRouter);
+app.use('/api/compare', compareRouter);
+app.use('/api/feedback', feedbackRouter);
+app.use('/api/fresh', freshRouter);
+app.use('/api/backup', backupRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -67,21 +130,30 @@ if (process.env.NODE_ENV === 'production') {
 
 // Error handling middleware
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('Unhandled error:', err);
+  log.error({ err }, 'Unhandled error');
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// Load extensions (internal providers, publish targets, etc.)
-loadExtensions().then(() => {
-  app.listen(Number(port), '0.0.0.0', () => {
-    console.log(`Skills Manager API server running at http://127.0.0.1:${port}`);
+function startListening(): void {
+  app.listen(port, host, () => {
+    log.info(`Skills Manager API server running at http://${host}:${port}`);
+    if (process.env.NODE_ENV !== 'production') {
+      log.warn('Dev mode: API auth disabled (server is bound to 127.0.0.1 only). For production deployment, run via cli.ts (NODE_ENV=production).');
+    }
   });
-}).catch((err) => {
-  console.error('[Extensions] Failed to load extensions:', err);
-  // Start server anyway even if extensions fail
-  app.listen(Number(port), '0.0.0.0', () => {
-    console.log(`Skills Manager API server running at http://127.0.0.1:${port}`);
+}
+
+// Initialize auth token + SQLite migration first, then load extensions, then listen
+ensureToken()
+  .then(() => migrateLegacyJsonl())
+  .then(() => loadExtensions())
+  .then(() => {
+    startListening();
+  })
+  .catch((err) => {
+    log.error({ err }, '[Server] Initialization warning');
+    // Start server anyway so user can recover via UI
+    startListening();
   });
-});
 
 export default app;

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useSkills } from '@/hooks/useSkills'
 import { useConfigStore } from '@/stores/configStore'
 import { useSkillsStore } from '@/stores/skillsStore'
@@ -7,14 +7,16 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { FolderCheck, Search, Settings2, Plus, Trash2, Pencil, ShieldCheck, Loader2, Sparkles } from 'lucide-react'
+import { FolderCheck, Search, Settings2, Plus, Trash2, Pencil, ShieldCheck, Loader2, Sparkles, GitCompareArrows } from 'lucide-react'
 import FileTree, { type SkillHealthSummary } from '@/components/skills/FileTree'
 import SkillEditor from '@/components/skills/Editor'
 import AISkillGenerator from '@/components/skills/AISkillGenerator'
 import AISkillOptimizer from '@/components/skills/AISkillOptimizer'
 import VersionHistoryDialog from '@/components/skills/VersionHistoryDialog'
 import SearchResults from '@/components/skills/SearchResults'
-import SkillHealthDialog, { type SkillHealthReport } from '@/components/skills/SkillHealthDialog'
+import SkillHealthDialog, { type RubricReport } from '@/components/skills/SkillHealthDialog'
+import SkillComparePanel from '@/components/skills/SkillComparePanel'
+import { feedbackApi, freshApi } from '@/api/client'
 import {
   Dialog,
   DialogContent,
@@ -118,6 +120,9 @@ export default function SkillsPage() {
   const [renameError, setRenameError] = useState('')
   const [activeTab, setActiveTab] = useState<string>('files')
 
+  // 对比评测
+  const [showCompare, setShowCompare] = useState(false)
+
   // 版本历史
   const [showVersionHistory, setShowVersionHistory] = useState(false)
   const [versionSkillPath, setVersionSkillPath] = useState('')
@@ -129,15 +134,24 @@ export default function SkillsPage() {
     setShowVersionHistory(true)
   }
 
-  // 健康度（Lint）— localStorage 持久化
-  const HEALTH_CACHE_KEY = 'skill-health-cache'
+  // 保鲜度 — localStorage 持久化
+  const FRESH_CACHE_KEY = 'skill-freshness-cache'
+  const [freshnessMap, setFreshnessMap] = useState<Record<string, 'fresh' | 'stale' | 'expired'>>(() => {
+    try {
+      const cached = localStorage.getItem(FRESH_CACHE_KEY)
+      return cached ? JSON.parse(cached) : {}
+    } catch { return {} }
+  })
+
+  // Rubric 评测 — localStorage 持久化
+  const HEALTH_CACHE_KEY = 'skill-rubric-cache'
   const [healthMap, setHealthMap] = useState<Record<string, SkillHealthSummary>>(() => {
     try {
       const cached = localStorage.getItem(HEALTH_CACHE_KEY)
       return cached ? JSON.parse(cached).map || {} : {}
     } catch { return {} }
   })
-  const [healthReports, setHealthReports] = useState<Record<string, SkillHealthReport>>(() => {
+  const [healthReports, setHealthReports] = useState<Record<string, RubricReport>>(() => {
     try {
       const cached = localStorage.getItem(HEALTH_CACHE_KEY)
       return cached ? JSON.parse(cached).reports || {} : {}
@@ -145,8 +159,28 @@ export default function SkillsPage() {
   })
   const [healthLoading, setHealthLoading] = useState(false)
   const [healthDialogOpen, setHealthDialogOpen] = useState(false)
-  const [activeHealthReport, setActiveHealthReport] = useState<SkillHealthReport | null>(null)
+  const [activeHealthReport, setActiveHealthReport] = useState<RubricReport | null>(null)
   const [activeHealthDesc, setActiveHealthDesc] = useState<string | undefined>(undefined)
+
+  // 保鲜度自动获取（tree 加载后批量检测）
+  useEffect(() => {
+    if (tree.length === 0) return
+    const skillPaths = tree
+      .filter(n => n.type === 'directory' && n.isValidSkill)
+      .map(n => n.path)
+    if (skillPaths.length === 0) return
+
+    freshApi.batchCheck(skillPaths)
+      .then(({ reports }) => {
+        const newMap: Record<string, 'fresh' | 'stale' | 'expired'> = {}
+        for (const r of reports) {
+          newMap[r.skillPath] = r.level
+        }
+        setFreshnessMap(newMap)
+        try { localStorage.setItem(FRESH_CACHE_KEY, JSON.stringify(newMap)) } catch { /* ignore */ }
+      })
+      .catch(() => { /* silent fail */ })
+  }, [tree])
 
   const [batchHealthDialogOpen, setBatchHealthDialogOpen] = useState(false)
   const [batchIncludeAi, setBatchIncludeAi] = useState(false)
@@ -164,12 +198,12 @@ export default function SkillsPage() {
           setHealthLoading(false)
           return
         }
-        body.includeAiAssess = true
+        body.includeAI = true
         body.baseUrl = model.baseUrl
         body.apiKey = model.apiKey
         body.modelName = model.modelName
       }
-      const resp = await fetch('/api/skill-lint/batch', {
+      const resp = await fetch('/api/skill-rubric/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -179,11 +213,12 @@ export default function SkillsPage() {
         throw new Error(err.error || `HTTP ${resp.status}`)
       }
       const data = await resp.json()
-      const reports: SkillHealthReport[] = data.reports || []
+      const reports: RubricReport[] = data.reports || []
       const newMap: Record<string, SkillHealthSummary> = {}
-      const newReports: Record<string, SkillHealthReport> = {}
+      const newReports: Record<string, RubricReport> = {}
       for (const r of reports) {
-        newMap[r.skillPath] = { score: r.score, grade: r.grade, issuesCount: r.issues.length }
+        const failCount = r.dimensions.flatMap(d => d.items).filter(i => i.result === 'fail').length
+        newMap[r.skillPath] = { score: Math.round(r.overallScore), grade: r.grade, failCount }
         newReports[r.skillPath] = r
       }
       setHealthMap(newMap)
@@ -191,9 +226,9 @@ export default function SkillsPage() {
       // Persist to localStorage
       try { localStorage.setItem(HEALTH_CACHE_KEY, JSON.stringify({ map: newMap, reports: newReports })) } catch { /* ignore quota errors */ }
       const aiSuffix = includeAiAssess ? '（含 AI 评估）' : ''
-      toast.success(`健康度检测完成${aiSuffix}：共检测 ${reports.length} 个 Skill`)
+      toast.success(`Rubric 评测完成${aiSuffix}：共评测 ${reports.length} 个 Skill`)
     } catch (e) {
-      toast.error(`健康度检测失败：${e instanceof Error ? e.message : '未知错误'}`)
+      toast.error(`Rubric 评测失败：${e instanceof Error ? e.message : '未知错误'}`)
     } finally {
       setHealthLoading(false)
     }
@@ -202,9 +237,9 @@ export default function SkillsPage() {
   const handleShowHealth = useCallback(async (dirPath: string) => {
     let report = healthReports[dirPath]
     if (!report) {
-      // 单个 Skill 即时检测
+      // 单个 Skill 即时评测
       try {
-        const resp = await fetch('/api/skill-lint/check', {
+        const resp = await fetch('/api/skill-rubric/evaluate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ skillPath: dirPath }),
@@ -214,7 +249,7 @@ export default function SkillsPage() {
           throw new Error(err.error || `HTTP ${resp.status}`)
         }
         const data = await resp.json()
-        report = data.report
+        report = data.report ?? data
         setHealthReports(prev => {
           const updated = { ...prev, [dirPath]: report }
           try {
@@ -224,7 +259,8 @@ export default function SkillsPage() {
           return updated
         })
         setHealthMap(prev => {
-          const updated = { ...prev, [dirPath]: { score: report.score, grade: report.grade, issuesCount: report.issues.length } }
+          const failCount = report.dimensions.flatMap((d: any) => d.items).filter((i: any) => i.result === 'fail').length
+          const updated = { ...prev, [dirPath]: { score: Math.round(report.overallScore), grade: report.grade, failCount } }
           try {
             const cached = JSON.parse(localStorage.getItem(HEALTH_CACHE_KEY) || '{}')
             localStorage.setItem(HEALTH_CACHE_KEY, JSON.stringify({ ...cached, map: updated }))
@@ -232,7 +268,7 @@ export default function SkillsPage() {
           return updated
         })
       } catch (e) {
-        toast.error(`检测失败：${e instanceof Error ? e.message : '未知错误'}`)
+        toast.error(`评测失败：${e instanceof Error ? e.message : '未知错误'}`)
         return
       }
     }
@@ -535,8 +571,24 @@ export default function SkillsPage() {
                 onSetAlias={handleSetAlias}
                 onRemoveAlias={handleRemoveAlias}
                 onVersionHistory={handleVersionHistory}
+                freshnessMap={freshnessMap}
                 healthMap={healthMap}
                 onShowHealth={handleShowHealth}
+                onFeedback={async (dirPath, dirName, feedbackType) => {
+                  try {
+                    await feedbackApi.submit({
+                      skillName: dirName,
+                      skillPath: dirPath,
+                      feedbackType,
+                      scenario: 'skills-library',
+                      toolUsed: 'skills-manager',
+                    })
+                    const labels = { effective: '有效', ineffective: '无效', suggestion: '建议' }
+                    toast.success(`已提交反馈：${labels[feedbackType]}`)
+                  } catch {
+                    toast.error('反馈提交失败')
+                  }
+                }}
               />
             </div>
           ) : (
@@ -573,17 +625,17 @@ export default function SkillsPage() {
             className="w-full justify-center text-xs gap-1.5 border-dashed border-emerald-300 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950"
             onClick={() => setBatchHealthDialogOpen(true)}
             disabled={healthLoading}
-            title="对所有 Skill 进行静态规则检测，可选 AI 评估"
+            title="对所有 Skill 进行 Rubric 四维评测，可选 AI 深度评估"
           >
             {healthLoading ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                检测中{batchIncludeAi ? '（含 AI 评估，可能需数分钟）' : '...'}
+                评测中{batchIncludeAi ? '（含 AI 评估，可能需数分钟）' : '...'}
               </>
             ) : (
               <>
                 <ShieldCheck className="h-3.5 w-3.5" />
-                批量健康度检测
+                批量 Rubric 评测
               </>
             )}
           </Button>
@@ -595,6 +647,17 @@ export default function SkillsPage() {
           >
             <Sparkles className="h-3.5 w-3.5" />
             AI 生成技能
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-center text-xs gap-1.5 border-dashed border-violet-300 text-violet-600 hover:bg-violet-50 hover:text-violet-700 dark:border-violet-700 dark:text-violet-400 dark:hover:bg-violet-950"
+            onClick={() => setShowCompare(true)}
+            disabled={tree.filter(n => n.type === 'directory' && n.isValidSkill).length < 2}
+            title="选择两个 Skill 进行 Rubric 对比评测"
+          >
+            <GitCompareArrows className="h-3.5 w-3.5" />
+            对比评测
           </Button>
         </div>
       </div>
@@ -631,12 +694,12 @@ export default function SkillsPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-emerald-500" />
-              批量健康度检测
+              批量 Rubric 评测
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <p className="text-sm text-muted-foreground">
-              对所有有效 Skill 进行静态规则检测（13 条规则），生成健康度评分（A-F 等级）。
+              对所有有效 Skill 进行 Rubric 四维评测（结构完整性、描述质量、内容深度、安全规范），生成综合评分（A-F 等级）。
             </p>
             <label className="flex items-start gap-2.5 cursor-pointer rounded-lg border p-3 hover:bg-muted/50 transition-colors">
               <input
@@ -646,9 +709,9 @@ export default function SkillsPage() {
                 className="mt-0.5 h-4 w-4 shrink-0"
               />
               <div className="space-y-1">
-                <span className="text-sm font-medium">同时进行 AI 评估 description 质量</span>
+                <span className="text-sm font-medium">同时进行 AI 深度评测</span>
                 <span className="block text-xs text-muted-foreground">
-                  使用默认模型对每个 Skill 的 description 进行语义质量打分和改进建议（消耗 token，更耗时）
+                  使用默认模型对需要语义理解的维度进行 AI 评测（消耗 token，更耗时）
                 </span>
               </div>
             </label>
@@ -659,7 +722,7 @@ export default function SkillsPage() {
             </Button>
             <Button size="sm" onClick={() => handleBatchHealthCheck(batchIncludeAi)}>
               <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
-              开始检测
+              开始评测
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1002,6 +1065,15 @@ export default function SkillsPage() {
             selectFile(selectedFile)
           }
         }}
+      />
+
+      {/* Skill Compare Panel */}
+      <SkillComparePanel
+        open={showCompare}
+        onOpenChange={setShowCompare}
+        skills={tree
+          .filter(n => n.type === 'directory' && n.isValidSkill)
+          .map(n => ({ name: n.name, path: n.path }))}
       />
     </div>
   )

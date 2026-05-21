@@ -3,6 +3,7 @@ import os from 'os';
 import fs from 'fs-extra';
 import { registerImportProvider } from './services/importService.js';
 import { registerPublishTarget } from './services/publishService.js';
+import { log } from './utils/logger.js';
 
 /**
  * Load extension files that register additional Import Providers and Publish Targets.
@@ -50,21 +51,21 @@ export async function loadExtensions(): Promise<void> {
         if (typeof ext.setup === 'function') {
           await ext.setup(context);
           loadedCount++;
-          console.log(`[Extensions] Loaded: ${file}`);
+          log.info(`[Extensions] Loaded: ${file}`);
         } else if (typeof ext.default?.setup === 'function') {
           await ext.default.setup(context);
           loadedCount++;
-          console.log(`[Extensions] Loaded: ${file}`);
+          log.info(`[Extensions] Loaded: ${file}`);
         } else {
-          console.warn(`[Extensions] Skipped ${file}: no setup() function exported`);
+          log.warn(`[Extensions] Skipped ${file}: no setup() function exported`);
         }
       } catch (err) {
-        console.error(`[Extensions] Failed to load ${file}:`, err);
+        log.error({ err }, `[Extensions] Failed to load ${file}`);
       }
     }
   }
 
   if (loadedCount > 0) {
-    console.log(`[Extensions] ${loadedCount} extension(s) loaded successfully`);
+    log.info(`[Extensions] ${loadedCount} extension(s) loaded successfully`);
   }
 }
