@@ -553,3 +553,28 @@ export const skillRubricApi = {
   evaluate: (data: { skillPath: string; templateId?: string; includeAI?: boolean }) =>
     request<{ report: any }>('/skill-rubric/evaluate', { method: 'POST', body: data }),
 };
+
+export interface SkillCardData {
+  name: string;
+  title: string;
+  version?: string;
+  sourceLabel?: string;
+  lastUpdated?: string;
+  capabilities: string[];
+  scenarios: string[];
+  examples: { title: string; description?: string }[];
+  related: string[];
+  references: { name: string; firstParagraph?: string }[];
+  rubric?: { overall: number; grade: 'A' | 'B' | 'C' | 'D' | 'F'; evaluatedAt?: string };
+  aiUsed: boolean;
+}
+
+export const skillCardApi = {
+  // includeAI defaults to true server-side. AI creds come from the server's
+  // default model config — never sent in the body.
+  generate: (data: { skillPath: string; includeAI?: boolean }) =>
+    request<{ html: string; data: SkillCardData }>('/skill-card/generate', {
+      method: 'POST',
+      body: data,
+    }),
+};

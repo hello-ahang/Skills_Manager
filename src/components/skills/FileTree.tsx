@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { FileTreeNode } from '@/types'
 import { cn } from '@/lib/utils'
-import { ChevronRight, ChevronDown, File, Folder, FolderOpen, FolderCheck, FolderOpenDot, Trash2, Plus, ChevronsUpDown, ChevronsDownUp, FilePlus, FolderPlus, Pencil, MoreHorizontal, Wand2, Download, Tag, X, History, Send, MessageSquarePlus } from 'lucide-react'
+import { ChevronRight, ChevronDown, File, Folder, FolderOpen, FolderCheck, FolderOpenDot, Trash2, Plus, ChevronsUpDown, ChevronsDownUp, FilePlus, FolderPlus, Pencil, MoreHorizontal, Wand2, Download, Tag, X, History, Send, MessageSquarePlus, LayoutDashboard } from 'lucide-react'
 import RelatedSkillsBadge from '@/components/skills/RelatedSkillsBadge'
 import { Button } from '@/components/ui/button'
 import {
@@ -44,6 +44,8 @@ interface FileTreeProps {
   onRemoveAlias?: (dirPath: string) => void
   onVersionHistory?: (dirPath: string, dirName: string) => void
   onPublishTo?: (dirPath: string, dirName: string) => void
+  /** 生成 Skill 可视化 HTML 卡片 */
+  onGenerateCard?: (dirPath: string, dirName: string) => void
   /** Skill 路径 -> 健康度摘要，用于在 Skill 目录节点旁展示徽章 */
   healthMap?: Record<string, SkillHealthSummary>
   /** 点击健康度徽章时触发，传入 Skill 目录路径 */
@@ -79,11 +81,12 @@ interface TreeNodeProps {
   onRemoveAlias?: (dirPath: string) => void
   onVersionHistory?: (dirPath: string, dirName: string) => void
   onPublishTo?: (dirPath: string, dirName: string) => void
+  onGenerateCard?: (dirPath: string, dirName: string) => void
   onFeedback?: (dirPath: string, dirName: string, feedbackType: 'effective' | 'ineffective' | 'suggestion') => void
   freshnessMap?: Record<string, 'fresh' | 'stale' | 'expired'>
 }
 
-function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, onSelectFile, onDeleteFile, onDeleteDir, onCreateFile, onCreateDir, onRename, onAIOptimize, onExport, skillAliases, onSetAlias, onRemoveAlias, onVersionHistory, onPublishTo, onFeedback, freshnessMap, healthMap, onShowHealth, onJumpRelated, knownSkillNames }: TreeNodeProps) {
+function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, onSelectFile, onDeleteFile, onDeleteDir, onCreateFile, onCreateDir, onRename, onAIOptimize, onExport, skillAliases, onSetAlias, onRemoveAlias, onVersionHistory, onPublishTo, onGenerateCard, onFeedback, freshnessMap, healthMap, onShowHealth, onJumpRelated, knownSkillNames }: TreeNodeProps) {
   const isSelected = node.path === selectedFile
   const isDirectory = node.type === 'directory'
   const expanded = expandedPaths.has(node.path)
@@ -259,6 +262,15 @@ function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, on
                     版本历史
                   </DropdownMenuItem>
                 )}
+                {isDirectory && node.isValidSkill && depth === 0 && onGenerateCard && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => onGenerateCard(node.path, node.name)}>
+                      <LayoutDashboard className="mr-2 h-3.5 w-3.5 text-violet-600" />
+                      生成可视化卡片
+                    </DropdownMenuItem>
+                  </>
+                )}
                 {isDirectory && node.isValidSkill && depth === 0 && onExport && (
                   <>
                     <DropdownMenuSeparator />
@@ -355,6 +367,7 @@ function TreeNode({ node, depth, selectedFile, expandedPaths, onToggleExpand, on
               onRemoveAlias={onRemoveAlias}
               onVersionHistory={onVersionHistory}
               onPublishTo={onPublishTo}
+              onGenerateCard={onGenerateCard}
               onFeedback={onFeedback}
               freshnessMap={freshnessMap}
               healthMap={healthMap}
@@ -397,7 +410,7 @@ function collectDefaultExpanded(nodes: FileTreeNode[], depth = 0): string[] {
   return paths
 }
 
-export default function FileTree({ nodes, selectedFile, onSelectFile, onDeleteFile, onDeleteDir, onCreateFile, onCreateDir, onRename, onAIOptimize, onExport, skillAliases, onSetAlias, onRemoveAlias, onVersionHistory, onPublishTo, onFeedback, freshnessMap, healthMap, onShowHealth, onJumpRelated }: FileTreeProps) {
+export default function FileTree({ nodes, selectedFile, onSelectFile, onDeleteFile, onDeleteDir, onCreateFile, onCreateDir, onRename, onAIOptimize, onExport, skillAliases, onSetAlias, onRemoveAlias, onVersionHistory, onPublishTo, onGenerateCard, onFeedback, freshnessMap, healthMap, onShowHealth, onJumpRelated }: FileTreeProps) {
   // Default: all directories collapsed
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const allDirPaths = useMemo(() => collectDirPaths(nodes), [nodes])
@@ -490,6 +503,7 @@ export default function FileTree({ nodes, selectedFile, onSelectFile, onDeleteFi
             onRemoveAlias={onRemoveAlias}
             onVersionHistory={onVersionHistory}
             onPublishTo={onPublishTo}
+            onGenerateCard={onGenerateCard}
             onFeedback={onFeedback}
             freshnessMap={freshnessMap}
             healthMap={healthMap}

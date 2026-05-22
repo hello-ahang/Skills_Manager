@@ -16,6 +16,7 @@ import VersionHistoryDialog from '@/components/skills/VersionHistoryDialog'
 import SearchResults from '@/components/skills/SearchResults'
 import SkillHealthDialog, { type RubricReport } from '@/components/skills/SkillHealthDialog'
 import SkillComparePanel from '@/components/skills/SkillComparePanel'
+import SkillCardDialog from '@/components/skills/SkillCardDialog'
 import { feedbackApi, freshApi } from '@/api/client'
 import {
   Dialog,
@@ -127,6 +128,11 @@ export default function SkillsPage() {
   const [showVersionHistory, setShowVersionHistory] = useState(false)
   const [versionSkillPath, setVersionSkillPath] = useState('')
   const [versionSkillName, setVersionSkillName] = useState('')
+
+  // 可视化卡片
+  const [showCardDialog, setShowCardDialog] = useState(false)
+  const [cardSkillPath, setCardSkillPath] = useState<string | null>(null)
+  const [cardSkillName, setCardSkillName] = useState<string>('')
 
   const handleVersionHistory = (dirPath: string, dirName: string) => {
     setVersionSkillPath(dirPath)
@@ -571,6 +577,11 @@ export default function SkillsPage() {
                 onSetAlias={handleSetAlias}
                 onRemoveAlias={handleRemoveAlias}
                 onVersionHistory={handleVersionHistory}
+                onGenerateCard={(dirPath, dirName) => {
+                  setCardSkillPath(dirPath)
+                  setCardSkillName(dirName)
+                  setShowCardDialog(true)
+                }}
                 freshnessMap={freshnessMap}
                 healthMap={healthMap}
                 onShowHealth={handleShowHealth}
@@ -1074,6 +1085,14 @@ export default function SkillsPage() {
         skills={tree
           .filter(n => n.type === 'directory' && n.isValidSkill)
           .map(n => ({ name: n.name, path: n.path }))}
+      />
+
+      {/* Skill Card Dialog */}
+      <SkillCardDialog
+        open={showCardDialog}
+        onOpenChange={setShowCardDialog}
+        skillPath={cardSkillPath}
+        skillName={cardSkillName}
       />
     </div>
   )
