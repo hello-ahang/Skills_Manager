@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useConfigStore } from '@/stores/configStore'
 import { configApi } from '@/api/client'
-import { Moon, Sun, Monitor, Gamepad2, Layout, Bot, Plus, Pencil, Trash2, Zap, Loader2, CheckCircle2, HelpCircle, Download } from 'lucide-react'
+import { Moon, Sun, Monitor, Bot, Plus, Pencil, Trash2, Zap, Loader2, CheckCircle2, HelpCircle, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,7 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { v4 as uuidv4 } from 'uuid'
 import type { LLMModel } from '@/types'
@@ -34,9 +33,8 @@ const pageTitles: Record<string, string> = {
 export default function Header() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { preferences, llmModels, defaultModelId, setTheme, setUIStyle, setDefaultModel } = useConfigStore()
+  const { preferences, llmModels, defaultModelId, setTheme, setDefaultModel } = useConfigStore()
   const title = pageTitles[location.pathname] || 'Skills Manager'
-  const isPixel = preferences.uiStyle === 'pixel'
 
   const [showModelDialog, setShowModelDialog] = useState(false)
   const [modelView, setModelView] = useState<'list' | 'add' | 'edit'>('list')
@@ -213,38 +211,6 @@ export default function Header() {
           <h1 className="text-lg font-semibold">{title}</h1>
         </div>
         <div className="flex items-center gap-2">
-          {/* UI Style Toggle */}
-          <div className="flex items-center rounded-md border-2 border-purple-300 dark:border-purple-700 p-0.5 bg-purple-50 dark:bg-purple-950/30">
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                'h-7 px-2.5 text-xs rounded-sm',
-                !isPixel
-                  ? 'bg-purple-600 text-white hover:bg-purple-700 hover:text-white'
-                  : 'text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/50'
-              )}
-              onClick={() => setUIStyle('default')}
-            >
-              <Layout className="mr-1 h-3.5 w-3.5" />
-              默认
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                'h-7 px-2.5 text-xs rounded-sm',
-                isPixel
-                  ? 'bg-purple-600 text-white hover:bg-purple-700 hover:text-white'
-                  : 'text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/50'
-              )}
-              onClick={() => setUIStyle('pixel')}
-            >
-              <Gamepad2 className="mr-1 h-3.5 w-3.5" />
-              像素
-            </Button>
-          </div>
-
           {/* Theme Toggle */}
           <DropdownMenu>
             <DropdownMenuTrigger className="inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer outline-none">

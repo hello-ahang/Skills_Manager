@@ -259,11 +259,8 @@ export interface ToolDefinition {
   knownIssues?: string[];
 }
 
-export type UIStyle = 'default' | 'pixel';
-
 export interface AppPreferences {
   theme: 'light' | 'dark' | 'system';
-  uiStyle: UIStyle;
   autoSync: boolean;
   backupBeforeReplace: boolean;
   /** Auto-sync to all bound projects after importing skills */

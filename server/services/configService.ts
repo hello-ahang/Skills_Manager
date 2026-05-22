@@ -86,7 +86,6 @@ const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   ],
   preferences: {
     theme: 'system',
-    uiStyle: 'default',
     autoSync: false,
     backupBeforeReplace: true,
     enableExtensionProviders: false,

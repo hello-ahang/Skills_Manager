@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { configApi } from '@/api/client'
-import type { ToolDefinition, AppPreferences, UIStyle, SourceDir, LLMModel } from '@/types'
+import type { ToolDefinition, AppPreferences, SourceDir, LLMModel } from '@/types'
 
 interface ConfigState {
   sourceDir: string
@@ -27,7 +27,6 @@ interface ConfigState {
   setActiveSourceDir: (id: string) => Promise<void>
   setDefaultModel: (id: string) => void
   setTheme: (theme: 'light' | 'dark' | 'system') => void
-  setUIStyle: (style: UIStyle) => void
 }
 
 export const useConfigStore = create<ConfigState>()((set, get) => ({
@@ -39,7 +38,6 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
   tools: [],
   preferences: {
     theme: 'system',
-    uiStyle: 'default',
     autoSync: false,
     backupBeforeReplace: true,
   },
@@ -65,9 +63,8 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
         loading: false,
         configLoaded: true,
       })
-      // Apply theme and UI style
+      // Apply theme
       applyTheme(prefs.theme || 'system')
-      applyUIStyle(prefs.uiStyle || 'default')
     } catch (error) {
       set({ loading: false, error: 'Failed to load config' })
     }
@@ -114,13 +111,6 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
     // Save silently without triggering loading state
     configApi.update({ preferences: { theme } }).catch(() => {})
   },
-
-  setUIStyle: (style) => {
-    applyUIStyle(style)
-    set((state) => ({ preferences: { ...state.preferences, uiStyle: style } }))
-    // Save silently without triggering loading state
-    configApi.update({ preferences: { uiStyle: style } }).catch(() => {})
-  },
 }))
 
 function applyTheme(theme: 'light' | 'dark' | 'system') {
@@ -133,57 +123,3 @@ function applyTheme(theme: 'light' | 'dark' | 'system') {
   }
 }
 
-// Preload pixel font at module init
-;(async () => {
-  try {
-    const font = new FontFace('ArkPixel', "url('/fonts/ark-pixel-12px-proportional-zh_cn.ttf.woff2') format('woff2')")
-    const loaded = await font.load()
-    document.fonts.add(loaded)
-  } catch {
-    // Font load failed, pixel style will use fallback font
-  }
-})()
-
-function applyUIStyle(style: UIStyle) {
-  const root = document.documentElement
-  const isCurrentlyPixel = root.classList.contains('pixel')
-  const wantsPixel = style === 'pixel'
-
-  // No change needed
-  if (isCurrentlyPixel === wantsPixel) return
-
-  // Create a solid overlay to mask the transition
-  const overlay = document.createElement('div')
-  overlay.style.cssText = `
-    position: fixed;
-    inset: 0;
-    z-index: 99999;
-    background: ${wantsPixel ? '#1c2035' : (root.classList.contains('dark') ? '#0a0a0a' : '#ffffff')};
-    opacity: 1;
-    pointer-events: none;
-    transition: opacity 0.15s ease-out;
-  `
-  document.body.appendChild(overlay)
-
-  // Disable transitions, apply class change
-  root.classList.add('no-transition')
-  root.classList.toggle('pixel', wantsPixel)
-
-  // Force reflow
-  void root.offsetHeight
-
-  // Fade out overlay to reveal new style smoothly
-  requestAnimationFrame(() => {
-    overlay.style.opacity = '0'
-    root.classList.remove('no-transition')
-
-    overlay.addEventListener('transitionend', () => {
-      overlay.remove()
-    })
-
-    // Safety cleanup in case transitionend doesn't fire
-    setTimeout(() => {
-      if (overlay.parentNode) overlay.remove()
-    }, 300)
-  })
-}
