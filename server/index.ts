@@ -89,7 +89,10 @@ app.use('/api', pathGuard());
 app.use('/api', rateLimit({ max: 300, windowMs: 60_000 }));
 app.use('/api/fresh', rateLimit({ max: 10, windowMs: 60_000, message: 'Freshness checks are rate-limited; try again shortly.' }));
 app.use('/api/backup', rateLimit({ max: 5, windowMs: 60_000, message: 'Backup operations are rate-limited.' }));
-app.use('/api/skill-card', rateLimit({ max: 15, windowMs: 60_000, message: 'Skill card generation is rate-limited; try again shortly.' }));
+// Rate-limit only the AI-bound generation endpoint, not the cheap local
+// GET/DELETE ops on stored cards. Otherwise opening the card library or
+// reopening the dialog a few times would burn the 15/min budget.
+app.use('/api/skill-card/generate', rateLimit({ max: 15, windowMs: 60_000, message: 'Skill card generation is rate-limited; try again shortly.' }));
 
 // API Routes
 app.use('/api/config', configRouter);
