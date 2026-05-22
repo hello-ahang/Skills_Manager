@@ -14,6 +14,7 @@ import AnalyticsPage from '@/pages/AnalyticsPage'
 import HomePage from '@/pages/HomePage'
 import ImportPage from '@/pages/ImportPage'
 import LifecyclePage from '@/pages/LifecyclePage'
+import SkillCardsPage from '@/pages/SkillCardsPage'
 import { Upload } from 'lucide-react'
 
 /** Global drag-and-drop overlay + keyboard shortcut handler */
@@ -112,6 +113,7 @@ function App() {
               <Route path="/links" element={<Navigate to="/projects" replace />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/lifecycle" element={<LifecyclePage />} />
+              <Route path="/cards" element={<SkillCardsPage />} />
               <Route path="/help" element={<HelpPage />} />
             </Routes>
           </main>

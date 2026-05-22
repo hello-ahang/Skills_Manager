@@ -8,7 +8,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Loader2, RefreshCw, Download, Copy, ExternalLink, Sparkles, AlertCircle } from 'lucide-react'
+import { Loader2, RefreshCw, Download, Copy, ExternalLink, Sparkles, AlertCircle, Clock } from 'lucide-react'
 import { toast } from 'sonner'
 import { skillCardApi, type SkillCardData } from '@/api/client'
 
@@ -19,6 +19,18 @@ interface SkillCardDialogProps {
   skillPath: string | null
   /** Display name for the toast / file download. */
   skillName?: string
+}
+
+function formatRelative(iso: string): string {
+  const then = new Date(iso).getTime()
+  const diff = Date.now() - then
+  if (diff < 60_000) return '刚刚'
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`
+  const days = Math.floor(diff / 86_400_000)
+  if (days < 30) return `${days} 天前`
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 /**
@@ -35,33 +47,63 @@ export default function SkillCardDialog({ open, onOpenChange, skillPath, skillNa
   const [html, setHtml] = useState<string>('')
   const [data, setData] = useState<SkillCardData | null>(null)
   const [useAI, setUseAI] = useState(true)
+  const [cardId, setCardId] = useState<string | null>(null)
+  const [cachedAt, setCachedAt] = useState<string | null>(null)
+  const [fromCache, setFromCache] = useState(false)
 
   const fileName = (skillName || (skillPath ? skillPath.split('/').pop() : 'skill') || 'skill') + '-card.html'
 
   const generate = useCallback(async (path: string, includeAI: boolean) => {
     setLoading(true)
     setError(null)
+    setFromCache(false)
     try {
       const result = await skillCardApi.generate({ skillPath: path, includeAI })
       setHtml(result.html)
       setData(result.data)
+      setCardId(result.cardId || null)
+      setCachedAt(result.generatedAt || null)
     } catch (err) {
       const msg = err instanceof Error ? err.message : '生成失败'
       setError(msg)
       setHtml('')
       setData(null)
+      setCardId(null)
     } finally {
       setLoading(false)
     }
   }, [])
 
-  // Auto-generate on open / skillPath change. AI toggle does NOT re-trigger
-  // — the user explicitly clicks "重新生成" after flipping it. This keeps
-  // accidental toggle clicks from burning AI calls.
+  // On open: try to show the previously persisted card instantly, then
+  // fall back to generate. This is the persistence payoff — refreshing
+  // the page or restarting sm won't re-trigger AI calls.
   useEffect(() => {
-    if (open && skillPath) {
-      void generate(skillPath, useAI)
+    if (!open || !skillPath) return
+
+    let cancelled = false
+    const loadCachedThenMaybeGenerate = async () => {
+      try {
+        const { card } = await skillCardApi.byPath(skillPath)
+        if (cancelled) return
+        if (card) {
+          setHtml(card.html)
+          setData(card.data)
+          setCardId(card.id)
+          setCachedAt(card.generatedAt)
+          setFromCache(true)
+          setError(null)
+          // Cache hit — skip generate to avoid paying AI cost on reopen.
+          return
+        }
+      } catch {
+        // by-path failure (e.g., pathGuard 403) is non-fatal — fall through
+        // to generate, which will surface the error in its own catch.
+      }
+      if (cancelled) return
+      await generate(skillPath, useAI)
     }
+    void loadCachedThenMaybeGenerate()
+    return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, skillPath])
 
@@ -71,6 +113,9 @@ export default function SkillCardDialog({ open, onOpenChange, skillPath, skillNa
     if (!open) {
       setHtml('')
       setData(null)
+      setCardId(null)
+      setCachedAt(null)
+      setFromCache(false)
       setError(null)
     }
   }, [open])
@@ -107,6 +152,7 @@ export default function SkillCardDialog({ open, onOpenChange, skillPath, skillNa
   }
 
   const handleRegenerate = () => {
+    // Regenerate explicitly bypasses the cache and pays AI cost again.
     if (skillPath) void generate(skillPath, useAI)
   }
 
@@ -136,9 +182,16 @@ export default function SkillCardDialog({ open, onOpenChange, skillPath, skillNa
             />
             <span>使用 AI 提炼文案</span>
           </label>
-          <span className="text-xs text-muted-foreground">
-            {useAI ? '关闭后改用纯静态抽取（更快）' : '开启后用 AI 重写为非技术语言'}
-          </span>
+          {fromCache && cachedAt ? (
+            <span className="inline-flex items-center gap-1 text-xs text-violet-700 bg-violet-50 dark:text-violet-300 dark:bg-violet-950/40 px-2 py-0.5 rounded-md">
+              <Clock className="h-3 w-3" />
+              上次生成于 {formatRelative(cachedAt)} · 点「重新生成」刷新
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              {useAI ? '关闭后改用纯静态抽取（更快）' : '开启后用 AI 重写为非技术语言'}
+            </span>
+          )}
           <div className="ml-auto">
             <Button
               variant="outline"
@@ -187,6 +240,7 @@ export default function SkillCardDialog({ open, onOpenChange, skillPath, skillNa
           <div className="mr-auto text-xs text-muted-foreground self-center">
             {data?.aiUsed ? '由 AI 提炼' : data ? '静态提取' : ''}
             {data?.rubric && ` · 质量分 ${data.rubric.overall} (${data.rubric.grade})`}
+            {cardId && ' · 已保存到卡片库'}
           </div>
           <Button variant="outline" size="sm" onClick={handleCopy} disabled={!html}>
             <Copy className="mr-1 h-3.5 w-3.5" />

@@ -569,12 +569,39 @@ export interface SkillCardData {
   aiUsed: boolean;
 }
 
+export interface SkillCardSummary {
+  id: string;
+  skillName: string;
+  skillPath: string;
+  title: string;
+  aiUsed: boolean;
+  hasRubric: boolean;
+  generatedAt: string;
+}
+
+export interface StoredSkillCard extends SkillCardSummary {
+  html: string;
+  data: SkillCardData;
+}
+
 export const skillCardApi = {
   // includeAI defaults to true server-side. AI creds come from the server's
-  // default model config — never sent in the body.
-  generate: (data: { skillPath: string; includeAI?: boolean }) =>
-    request<{ html: string; data: SkillCardData }>('/skill-card/generate', {
-      method: 'POST',
-      body: data,
-    }),
+  // default model config — never sent in the body. persist defaults to true
+  // server-side; pass persist:false for an ephemeral preview.
+  generate: (data: { skillPath: string; includeAI?: boolean; persist?: boolean }) =>
+    request<{ html: string; data: SkillCardData; cardId?: string; generatedAt?: string }>(
+      '/skill-card/generate',
+      { method: 'POST', body: data },
+    ),
+  list: () => request<{ cards: SkillCardSummary[] }>('/skill-card/list'),
+  get: (id: string) => request<{ card: StoredSkillCard }>(`/skill-card/${encodeURIComponent(id)}`),
+  byPath: (skillPath: string) =>
+    request<{ card: StoredSkillCard | null }>(
+      `/skill-card/by-path?skillPath=${encodeURIComponent(skillPath)}`,
+    ),
+  delete: (id: string) =>
+    request<{ deleted: boolean }>(`/skill-card/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  // Build a direct-view URL for opening the rendered HTML in a new tab.
+  // Requires the auth interceptor (patchFetch) — opens via fetch+blob.
+  viewUrl: (id: string) => `/api/skill-card/${encodeURIComponent(id)}/view`,
 };

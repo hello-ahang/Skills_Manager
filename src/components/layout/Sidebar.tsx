@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { FolderOpen, BookOpen, BarChart3, Home, ChevronLeft, ChevronRight, Download, Radar, Kanban } from 'lucide-react'
+import { FolderOpen, BookOpen, BarChart3, Home, ChevronLeft, ChevronRight, Download, Radar, Kanban, LayoutDashboard } from 'lucide-react'
 import {
   Tooltip,
   TooltipContent,
@@ -16,6 +16,7 @@ const navItems = [
   { path: '/projects', label: '项目管理', icon: FolderOpen },
   { path: '/analytics', label: '使用分析', icon: BarChart3 },
   { path: '/lifecycle', label: '生命周期', icon: Kanban },
+  { path: '/cards', label: '卡片库', icon: LayoutDashboard },
 ]
 
 export default function Sidebar() {
