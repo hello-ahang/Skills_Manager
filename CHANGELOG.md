@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added — Skill 可视化卡片
+
+- **新功能**：Skills 库文件树每个 Skill 节点的下拉菜单新增「生成可视化卡片」项。点击后弹出 Dialog,自动读取 SKILL.md + `references/` 摘要,可选调用默认 LLM 把技术 description 提炼为面向**非技术同事**的「一句话价值 + 能力点 + 适用场景 + 示例」一屏 HTML 卡片。
+- **交付形式**:Dialog 内 `<iframe srcDoc sandbox="">` 实时预览(隔离样式,沙箱防 XSS 逃逸),底部三按钮:「下载 .html」「复制 HTML 源码」「新标签页打开」。生成的 HTML **完全自包含**(内联 CSS / inline SVG / 系统字体),双击文件直接可看,无外链依赖。
+- **AI 开关**:Dialog 顶部「使用 AI 提炼文案」开关默认开;关闭后改走纯静态抽取(从 frontmatter / H2 标题 / 触发词 pattern 提取),也能生成可用卡片。开关切换不自动重新生成——用户显式点「重新生成」才花 AI 调用。
+- **质量分嵌入**:若 `rubric_cache` 已有该 Skill 的 Rubric 评测分,卡片右上角自动渲染 inline SVG 圆环 gauge 显示分数 + 等级色;无缓存则不显示。
+- **暗色兼容**:卡片 CSS 含 `@media (prefers-color-scheme: dark)` 一套主题变量,跟随系统暗色模式自动切换。
+- **新增 API**:`POST /api/skill-card/generate`,入参 `{ skillPath, includeAI? }`,出参 `{ html, data }`。`/api/skill-card/*` 限频 15/min。AI 凭据严格走 `getDefaultModelConfig()`,body 不接受 `baseUrl/apiKey/modelName`(沿用 v2.1.1 SSRF 防御模型)。
+- **新增文件**:
+  - 后端:`server/services/skillCardService.ts`(extract + AI + render)、`server/routes/skill-card.ts`
+  - 前端:`src/components/skills/SkillCardDialog.tsx`、`src/api/client.ts` 加 `skillCardApi`
+  - 测试:`server/services/skillCardService.test.ts`(23 个单测,覆盖 XSS escape、AI mock、静态 fallback、e2e)、`server/__regression__/skill-card.integration.test.ts`(pathGuard 集成)
+
+### Tests
+
+- 测试数 87 → **114**(14 test files),`npm test` 一键全绿。
+
+---
+
 ## [2.1.1] - 2026-05-21
 
 ### Security — 闭口 v2.1.0 review 暴露的剩余漏洞

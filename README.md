@@ -21,6 +21,7 @@ Skills 统一管理平台 — 为同时使用 Claude、Qoder、QoderWork、Openc
 | **Skills 雷达** | AI 语义搜索（描述场景匹配 Skill）、能力总览（AI 分类统计 + hover 展示详情）、自动标签分类、Skills 全景列表（多 Skills 库聚合 + 版本号展示 + 模糊搜索）、数据本地持久化 |
 | **Skills 工程化** ⭐ v1.4.0 | Lint 静态检测（13 条规则覆盖 description / 结构 / 安全 / 一致性）、健康度评分（A-F 等级 + 0-100 分）、AI description 质量评估（按需）、**Skills 测试沙箱**（手动/AI 自动生成场景 → 模拟触发决策 → 触发率+匹配度双指标 → 历史回看，可搜索下拉支持 name·description 展示）、软依赖管理（YAML `related` 字段）、场景智能搜索 |
 | **使用分析** | 事件埋点、仪表盘概览、热门 Skills 排行、最近活动时间线，数据本地存储 |
+| **Skill 可视化卡片** ⭐ 新 | 文件树下拉菜单一键「生成可视化卡片」：自动读 SKILL.md + references → 静态抽取（始终可用） + 可选 AI 提炼（默认开） → Dialog 内 iframe 预览一屏 HTML 卡片 → 下载 .html / 复制源码 / 新标签页打开。卡片完全自包含（内联 CSS + inline SVG）、暗色兼容、有 Rubric 缓存时自动嵌入分数环。 |
 <img width="800" height="447" alt="slide_01" src="https://github.com/user-attachments/assets/85d10408-96e0-4c19-9fc8-17d49f960928" />
 <img width="800" height="447" alt="slide_02" src="https://github.com/user-attachments/assets/076550a4-7e75-4a57-b48d-c23f6504bcbd" />
 <img width="800" height="447" alt="slide_03" src="https://github.com/user-attachments/assets/bf0a3ff4-5883-41b5-abea-024581701231" />
@@ -204,7 +205,8 @@ skills-manager/
 │   │   ├── compare.ts         # Skill 对比 API
 │   │   ├── feedback.ts        # 使用反馈 API
 │   │   ├── fresh.ts           # 保鲜检测 API
-│   │   └── backup.ts          # 数据备份/恢复 API
+│   │   ├── backup.ts          # 数据备份/恢复 API
+│   │   └── skill-card.ts      # Skill 可视化卡片 API（HTML 生成）
 │   ├── services/
 │   │   ├── configService.ts   # 配置管理
 │   │   ├── fileService.ts     # 文件操作
@@ -223,7 +225,8 @@ skills-manager/
 │   │   ├── evalLoopService.ts # 评测-改进循环引擎
 │   │   ├── compareService.ts  # Skill 对比评测服务
 │   │   ├── feedbackService.ts # 使用反馈采集服务（SQLite）
-│   │   └── freshService.ts    # 自动保鲜检测服务（含 SSRF 防御）
+│   │   ├── freshService.ts    # 自动保鲜检测服务（含 SSRF 防御）
+│   │   └── skillCardService.ts # 可视化卡片服务（SKILL.md → HTML,可选 AI 提炼）
 │   └── utils/
 │       ├── symlink.ts         # 软链接工具函数
 │       ├── validation.ts      # 路径/文件名校验
@@ -256,6 +259,7 @@ skills-manager/
 │   │   │   ├── AISkillOptimizer.tsx   # AI 优化技能弹框（DiffEditor 对比）
 │   │   │   ├── SkillHealthDialog.tsx  # 健康度弹框（四维雷达图 + Rubric 报告 + Eval Loop）
 │   │   │   ├── SkillComparePanel.tsx  # Skill 对比评测面板
+│   │   │   ├── SkillCardDialog.tsx    # 可视化卡片预览/下载/复制 Dialog
 │   │   │   ├── EvalLoopPanel.tsx      # 评测-改进循环面板
 │   │   │   ├── VersionHistoryDialog.tsx # 版本历史弹框
 │   │   │   └── SearchResults.tsx      # 搜索结果组件
@@ -553,6 +557,7 @@ EOF
 | POST | `/api/eval-loop/stop` | 终止指定 loop |
 | GET | `/api/eval-loop/{history,active}` | 历史 / 进行中循环 |
 | POST | `/api/compare/skills` | 双 Skill Rubric + 内容 Diff（最多 5000 行） |
+| POST | `/api/skill-card/generate` | 生成一屏 HTML 可视化卡片（`includeAI` 可选；模型从 user-config 取，限频 15/min） |
 | POST | `/api/feedback` | 提交反馈（effective / ineffective / partial / suggestion） |
 | GET | `/api/feedback?skillPath=` | 查反馈（可按 skillPath 过滤） |
 | GET | `/api/feedback/stats` | 反馈统计聚合 |
