@@ -46,7 +46,7 @@ interface SkillsState {
   setSkillAlias: (dirPath: string, alias: string) => void
   removeSkillAlias: (dirPath: string) => void
 
-  fetchTree: () => Promise<void>
+  fetchTree: (sourceDirId?: string) => Promise<void>
   selectFile: (path: string) => Promise<void>
   updateContent: (content: string) => void
   saveFile: () => Promise<void>

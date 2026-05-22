@@ -18,6 +18,8 @@ import {
   PlayCircle,
   TrendingUp,
   GitCompareArrows,
+  Library,
+  Award,
 } from 'lucide-react'
 import SkillComparePanel from '@/components/skills/SkillComparePanel'
 import AISearchSection from '@/components/radar/AISearchSection'

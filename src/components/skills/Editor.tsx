@@ -73,7 +73,7 @@ export default function SkillEditor({
   }
 
   const fileName = filePath.split('/').pop() || ''
-  const isEditing = editorMode === 'edit'
+  const isEditing = editorMode === 'edit' || editorMode === 'diff'
 
   return (
     <div className="flex h-full flex-col">
@@ -141,7 +141,7 @@ export default function SkillEditor({
           <div className="mx-1 h-4 w-px bg-border" />
 
           {/* Action buttons */}
-          {!isEditing && editorMode !== 'diff' ? (
+          {!isEditing ? (
             <Button size="sm" onClick={onEnterEdit}>
               <Pencil className="mr-1.5 h-3.5 w-3.5" />
               编辑
