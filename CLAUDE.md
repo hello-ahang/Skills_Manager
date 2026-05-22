@@ -13,7 +13,7 @@ Vite + React 18 前端 / Express + tsx 后端 / better-sqlite3 + JSON 混合存�
 ```bash
 sm                    # 启动（npm run dev 等价）
 sm-stop               # 停止 + 清端口
-npm test              # vitest 全跑（139 tests, 16 files；并发模式 safeUnzip 有 race，CI 用 `npm test -- --no-file-parallelism`）
+npm test              # vitest 全跑（148 tests, 17 files；并发模式 safeUnzip 有 race，CI 用 `npm test -- --no-file-parallelism`）
 npm run build         # 生产构建
 
 npx tsc -p tsconfig.server.json --noEmit   # 后端类型检查
@@ -21,7 +21,7 @@ npx tsc -p tsconfig.app.json    --noEmit   # 前端类型检查
 npx vitest run server/path/to/file.test.ts  # 跑单个测试
 ```
 
-提交前最低守门：上面的 server tsc + vitest 都必须 0 错 / 全绿。
+提交前最低守门：上面的 server tsc + **app tsc** + vitest 都必须 0 错 / 全绿。app tsc 现强制纳入 gate(此前 `ignoreDeprecations: "6.0"` 让 tsc 在 config 阶段 abort,导致 lucide-react 漏 import 这种 undefined identifier bug 在 dev/build 都不报,只能等用户访问页面白屏才发现)。
 
 ## 关键路径
 
@@ -81,5 +81,5 @@ src/api/client.ts               # 前端 API 封装（compareApi / lifecycleApi 
 
 - `src/pages/SkillsPage.tsx`（1080 行）、`src/components/skills/AISkillGenerator.tsx`（930 行）超 800 行 cap，需要拆分。`SkillsRadarPage.tsx` 已拆到 513 行，`skillCardService.ts` 已拆到 523 行（模板抽到 `skillCardTemplate.ts`）。
 - `src/api/client.ts` 仍有 ~25 处 `any`（review 报告 H13），新增代码请显式类型。
-- `tsconfig.app.json` 的 `"ignoreDeprecations": "6.0"` 在 tsc 5.9 报警但不阻塞构建（exit 0）；升级 tsc 6.x 后改回。
+- ~~`tsconfig.app.json` 的 `"ignoreDeprecations": "6.0"`~~ 已改回 `"5.0"`(tsc 5.9 下 `"6.0"` 实测会让 tsc 在 config 阶段直接 abort,frontend tsc 长期形同虚设,导致 lucide-react 漏 import 类 undefined identifier bug 一路漏到 runtime)。同步 `tsconfig.node.json` 也已对齐 `"5.0"`。升级 tsc 6.x 后两处一起改回 `"6.0"`。
 - **safeUnzip race（已知,跟踪中）**：`server/utils/safeUnzip.ts` 的 `'close'` 事件可能在 `fs.ensureDir.then(...)` 还在 microtask 队列时触发，导致 `'single entry exceeds limit'` 类的 fail() 抢不过 resolve()，promise 提前 resolve 为 `{written:0,skipped:[]}`。表现为 `safeUnzip.test.ts` 的「single entry exceeds limit」测试在 vitest 默认 worker 并发模式下间歇失败,`vitest run --no-file-parallelism` 稳定通过。临时缓解：CI 用串行模式跑测试；根因修复：在 `safeUnzipFromStream` 加 in-flight write counter,所有 writer `finish` 之前不让 'close' resolve。

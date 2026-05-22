@@ -7,7 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [2.2.0] - 2026-05-22
+
+### Removed — 像素主题彻底删除
+
+`默认 / 像素` 切换 UI 整体下线,只保留默认主题。
+
+- 删除项:`Header.tsx` 顶部 toggle 按钮组、`configStore` 的 `setUIStyle` / `applyUIStyle` / ArkPixel font preload、`UIStyle` 类型 + `AppPreferences.uiStyle` 字段、`index.css` 的 `@font-face ArkPixel` + `.pixel { ... }` 整块 + `.no-transition`(共 ~210 行 CSS)、`public/fonts/ark-pixel-12px-proportional-zh_cn.ttf.woff2` 字体文件、`server/services/configService.ts` 的 `DEFAULT_PROJECT_CONFIG.preferences.uiStyle` 默认值
+- 旧 `user-config.json` 残留 `uiStyle` 字段被静默忽略,无需 migration
+
+### Changed — 首页 Linear 风格重设
+
+- Hero 改为 5xl mono 大字号双行 + violet `cursor-blink` keyframe(`steps(2)` hard cut 模拟 macOS Terminal)
+- 干掉 `<Card>` 框,改 mono uppercase section labels + 细分隔线(STATUS / WORKFLOW / NOTES 三段)
+- STATUS 三 KPI:源目录 / 项目 / 卡片(实时 `Promise.allSettled` 拉,失败 fallback `—`)
+- WORKFLOW 横向 4 步 timeline,replaces 「痛点 / 解法 / 步骤」三段平铺
+- 主 CTA 改 `bg-foreground text-background` 强黑白对比
+- 删除 ARCHITECTURE 树状图段、BACKUP 备份段(备份功能本身保留,首页不展示)
+
+### Changed — 卡片库改 Skill 粒度
+
+- `/cards` 列表层每个 Skill 一张代表卡(显示 latest 版本),`N 个版本` 徽章(N≥2 时显示)
+- 列表层「删除」改为删整组(`Promise.allSettled` 5 次 DELETE,无新 batch endpoint),AlertDialog 警告 N 个版本
+- 预览 dialog 顶部加 segmented control 切版本(标签 `最新 · HH:MM` / `HH:MM`),active 段附带单版本删按钮
+- 同步首页 STATUS 卡片 KPI 改用 `groupCardsBySkill().length`,与列表语义一致
+
+### Added — `groupCardsBySkill` 纯函数 + 单测
+
+- `src/lib/cardGrouping.ts`:按 `skillPath`(非 `skillName`,避免不同 sourceDir 同名 skill 错合)分组,组内 generatedAt DESC,组间各自 latest DESC
+- `src/lib/cardGrouping.test.ts`:8 case(empty / single / multi / 组内排序 / 组间排序 / rename mid-history / aiUsed/hasRubric 透传 / 同名异路径不合并)
+
+### Fixed — `/cards` 5173 origin Unauthorized
+
+- vite `open: true` 打开 5173 origin 时不带 `?token=`,localStorage(per-origin)空,所有 `/api/*` 401
+- 改造:`vite.config.ts` 在 config 阶段调用新增的 `getDevOpenUrl(SECURITY_PATH)` 读 `~/.skills-manager/security.json`,把 token 注入 auto-open URL
+- `server/utils/devOpenUrl.ts`(纯函数 + 9 case 测试):正常 / ENOENT / JSON 损坏 / token 缺失 / token 短 / token 非字符串 / JSON 根非对象 / URL 特殊字符 / 16 字符边界。失败一律 fallback `true`,严守「dev server boot ≠ auth bypass」
+- token 仍仅 header(`X-SM-Token`),URL `?token=` 由 `captureTokenFromUrl` 首次加载捕获到 localStorage 后立即从地址栏剥除
+- `server/index.ts`:替换 misleading 的 `[Dev] API auth disabled` 日志
+
+### Fixed — `/radar` 白屏
+
+- v1.6 cleanup sweep 删了 lucide-react 的 `Library` + `Award` import,但 JSX 还在用(`SkillsRadarPage.tsx:188 + 241`),运行时 `ReferenceError`
+- 根因:`tsconfig.app.json` 的 `ignoreDeprecations: "6.0"` 在 tsc 5.9 下是 TS5103 fatal,frontend tsc 在 config 阶段 abort,长期形同虚设。改回 `"5.0"` 后 tsc 真正运行
+- 顺手修暴露的 2 处历史 type 错误:`stores/skillsStore.ts:49` `fetchTree` 类型签名补 `(sourceDirId?: string)` 与实现对齐;`components/skills/Editor.tsx:76` `isEditing` 扩展为 `'edit' | 'diff'`,解开 control-flow narrow,Diff 按钮 active 高亮终于能体现
+- frontend tsc 加进 commit gate(`CLAUDE.md`),v1.6-style undefined identifier 永久被 catch
 
 ### Added — Skill 可视化卡片(含持久化 + 「卡片库」页面)
 
@@ -54,8 +97,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Tests
 
-- 测试数 87 → **139**(16 test files),`npm test --no-file-parallelism` 全绿。
-- 注:`safeUnzip.test.ts` 的「single entry exceeds limit」测试在 vitest worker 并发模式下存在 pre-existing 的 timing race(v2.1.1 引入,与本次改动无关),`--no-file-parallelism` 稳定通过。详见 [CLAUDE.md](CLAUDE.md) §Tech debt。
+- 测试数 87 → 139(skill-card 一波)→ **156**(18 test files,本次再 +9 devOpenUrl + 8 cardGrouping),`npm test -- --no-file-parallelism` 全绿
+- 注:`safeUnzip.test.ts` 的「single entry exceeds limit」测试在 vitest worker 并发模式下存在 pre-existing 的 timing race,`--no-file-parallelism` 稳定通过。详见 [CLAUDE.md](CLAUDE.md) §Tech debt
 
 ---
 
