@@ -38,12 +38,16 @@ router.post('/generate', async (req: Request, res: Response) => {
       ? skillPath
       : path.join(await getActiveSourceDir(), skillPath);
 
-    if (!await fs.pathExists(absPath)) {
-      res.status(404).json({ error: `Skill directory not found: ${absPath}` });
-      return;
+    let stat;
+    try {
+      stat = await fs.stat(absPath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        res.status(404).json({ error: `Skill directory not found: ${absPath}` });
+        return;
+      }
+      throw err;
     }
-
-    const stat = await fs.stat(absPath);
     if (!stat.isDirectory()) {
       res.status(400).json({ error: 'skillPath must be a directory' });
       return;

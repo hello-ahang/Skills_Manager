@@ -65,8 +65,6 @@ type ParsedSkill = ParsedSkillMd;
  */
 async function listReferences(skillDir: string): Promise<SkillCardReference[]> {
   const refDir = path.join(skillDir, 'references');
-  if (!await fs.pathExists(refDir)) return [];
-
   let entries: string[];
   try {
     entries = await fs.readdir(refDir);
@@ -74,19 +72,15 @@ async function listReferences(skillDir: string): Promise<SkillCardReference[]> {
     return [];
   }
 
-  const mdFiles = entries.filter(e => /\.md$/i.test(e));
-  const out: SkillCardReference[] = [];
-
-  for (const name of mdFiles.slice(0, 8)) {
+  const mdFiles = entries.filter(e => /\.md$/i.test(e)).slice(0, 8);
+  return Promise.all(mdFiles.map(async name => {
     try {
       const content = await fs.readFile(path.join(refDir, name), 'utf-8');
-      const firstParagraph = extractFirstParagraph(content);
-      out.push({ name, firstParagraph });
+      return { name, firstParagraph: extractFirstParagraph(content) };
     } catch {
-      out.push({ name });
+      return { name };
     }
-  }
-  return out;
+  }));
 }
 
 function extractFirstParagraph(markdown: string): string | undefined {
@@ -461,13 +455,15 @@ export async function generateSkillCard(
   skillDir: string,
   opts: GenerateCardOptions = {},
 ): Promise<SkillCardResult> {
-  const parsed = await parseSkillMd(skillDir);
+  const [parsed, references] = await Promise.all([
+    parseSkillMd(skillDir),
+    listReferences(skillDir),
+  ]);
   if (!parsed) {
     throw new Error(`SKILL.md not found at ${skillDir}`);
   }
 
   const fallbackName = path.basename(skillDir);
-  const references = await listReferences(skillDir);
   const base = extractStaticCardData(parsed, references, fallbackName);
 
   let ai: AICardResponse | null = null;

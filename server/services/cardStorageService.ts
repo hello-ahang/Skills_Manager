@@ -61,11 +61,11 @@ async function ensureDir(): Promise<void> {
 }
 
 async function readIndex(): Promise<CardSummary[]> {
-  if (!await fs.pathExists(indexPath())) return [];
   try {
     const data = await fs.readJson(indexPath());
     return Array.isArray(data) ? data : [];
   } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
     log.warn({ err: err instanceof Error ? err.message : String(err) }, '[cardStorage] index.json corrupt, treating as empty');
     return [];
   }
@@ -122,17 +122,18 @@ export async function saveCard(
     data,
   };
 
-  // Write payload first, then update index. If the index write fails, the
-  // orphan payload file is recoverable; the reverse would leave a dangling
-  // index entry pointing at a missing file.
-  await fs.writeJson(cardPath(id), stored, { spaces: 2 });
+  // Payload file (new uuid path) and existing index.json are independent —
+  // write payload + load existing index in parallel. Index write must wait
+  // for both: payload-first ordering matters if the index write fails
+  // (orphan payload is recoverable; orphan index entry isn't).
+  const [, index] = await Promise.all([
+    fs.writeJson(cardPath(id), stored, { spaces: 2 }),
+    readIndex(),
+  ]);
+  index.unshift(toSummary(stored));
 
-  const index = await readIndex();
-  index.unshift(toSummary(stored)); // newest first
-
-  // Prune per-skill: keep newest MAX_PER_SKILL for each skillPath.
-  // Normalize per-key so historical entries with Windows backslashes get
-  // grouped with their new forward-slash siblings.
+  // Per-skill retention; normalize the key so legacy backslash entries
+  // group with current forward-slash entries on lookup.
   const perSkillCount: Record<string, number> = {};
   const toKeep: CardSummary[] = [];
   const toRemove: CardSummary[] = [];
@@ -147,13 +148,11 @@ export async function saveCard(
     }
   }
 
-  for (const entry of toRemove) {
-    try {
-      await fs.remove(cardPath(entry.id));
-    } catch (err) {
+  await Promise.all(toRemove.map(entry =>
+    fs.remove(cardPath(entry.id)).catch(err => {
       log.warn({ id: entry.id, err: err instanceof Error ? err.message : String(err) }, '[cardStorage] failed to delete pruned card payload');
-    }
-  }
+    }),
+  ));
 
   await writeIndex(toKeep);
   return { id, generatedAt };
@@ -171,12 +170,10 @@ export async function listCards(): Promise<CardSummary[]> {
  */
 export async function getCard(id: string): Promise<StoredCard | null> {
   if (!ID_RE.test(id)) return null;
-  const filePath = cardPath(id);
-  if (!await fs.pathExists(filePath)) return null;
   try {
-    const stored = await fs.readJson(filePath);
-    return stored as StoredCard;
+    return await fs.readJson(cardPath(id)) as StoredCard;
   } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
     log.warn({ id, err: err instanceof Error ? err.message : String(err) }, '[cardStorage] payload read failed');
     return null;
   }
