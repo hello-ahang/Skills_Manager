@@ -144,7 +144,11 @@ function startListening(): void {
   app.listen(port, host, () => {
     log.info(`Skills Manager API server running at http://${host}:${port}`);
     if (process.env.NODE_ENV !== 'production') {
-      log.warn('Dev mode: API auth disabled (server is bound to 127.0.0.1 only). For production deployment, run via cli.ts (NODE_ENV=production).');
+      // Auth is enforced in dev too (v1.6 hardening, see auth.ts). The Vite
+      // dev server reads ~/.skills-manager/security.json and injects ?token=
+      // into the auto-open URL so the frontend captures it on first load. Set
+      // SM_AUTH_DISABLE=1 to bypass auth (loopback host only).
+      log.info('[Dev] API auth enforced; Vite opens with ?token= from ~/.skills-manager/security.json. Set SM_AUTH_DISABLE=1 (loopback only) to bypass.');
     }
   });
 }
