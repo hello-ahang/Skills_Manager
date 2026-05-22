@@ -21,7 +21,7 @@ Skills 统一管理平台 — 为同时使用 Claude、Qoder、QoderWork、Openc
 | **Skills 雷达** | AI 语义搜索（描述场景匹配 Skill）、能力总览（AI 分类统计 + hover 展示详情）、自动标签分类、Skills 全景列表（多 Skills 库聚合 + 版本号展示 + 模糊搜索）、数据本地持久化 |
 | **Skills 工程化** ⭐ v1.4.0 | Lint 静态检测（13 条规则覆盖 description / 结构 / 安全 / 一致性）、健康度评分（A-F 等级 + 0-100 分）、AI description 质量评估（按需）、**Skills 测试沙箱**（手动/AI 自动生成场景 → 模拟触发决策 → 触发率+匹配度双指标 → 历史回看，可搜索下拉支持 name·description 展示）、软依赖管理（YAML `related` 字段）、场景智能搜索 |
 | **使用分析** | 事件埋点、仪表盘概览、热门 Skills 排行、最近活动时间线，数据本地存储 |
-| **Skill 可视化卡片** ⭐ 新 | 文件树下拉菜单一键「生成可视化卡片」：自动读 SKILL.md + references → 静态抽取（始终可用） + 可选 AI 提炼（默认开） → Dialog 内 iframe 预览一屏 HTML 卡片 → 下载 .html / 复制源码 / 新标签页打开。卡片完全自包含（内联 CSS + inline SVG）、暗色兼容、有 Rubric 缓存时自动嵌入分数环。 |
+| **Skill 可视化卡片** ⭐ 新 | 文件树下拉菜单一键「生成可视化卡片」：自动读 SKILL.md + references → 静态抽取（始终可用） + 可选 AI 提炼（默认开） → Dialog 内 iframe 预览一屏 HTML 卡片 → 下载 .html / 复制源码 / 新标签页打开。卡片完全自包含（内联 CSS + inline SVG）、暗色兼容、有 Rubric 缓存时自动嵌入分数环。**自动持久化到 `~/.skills-manager/cards/`**，刷新/重启不丢失，再次打开 Dialog 秒回显，不会重复触发 AI；侧边栏「卡片库」入口可查看/搜索/预览/删除全部历史卡片（每 Skill 保留最近 5 条）。 |
 <img width="800" height="447" alt="slide_01" src="https://github.com/user-attachments/assets/85d10408-96e0-4c19-9fc8-17d49f960928" />
 <img width="800" height="447" alt="slide_02" src="https://github.com/user-attachments/assets/076550a4-7e75-4a57-b48d-c23f6504bcbd" />
 <img width="800" height="447" alt="slide_03" src="https://github.com/user-attachments/assets/bf0a3ff4-5883-41b5-abea-024581701231" />
@@ -206,7 +206,7 @@ skills-manager/
 │   │   ├── feedback.ts        # 使用反馈 API
 │   │   ├── fresh.ts           # 保鲜检测 API
 │   │   ├── backup.ts          # 数据备份/恢复 API
-│   │   └── skill-card.ts      # Skill 可视化卡片 API（HTML 生成）
+│   │   └── skill-card.ts      # Skill 可视化卡片 API（生成 + 持久化 + 卡片库）
 │   ├── services/
 │   │   ├── configService.ts   # 配置管理
 │   │   ├── fileService.ts     # 文件操作
@@ -226,7 +226,8 @@ skills-manager/
 │   │   ├── compareService.ts  # Skill 对比评测服务
 │   │   ├── feedbackService.ts # 使用反馈采集服务（SQLite）
 │   │   ├── freshService.ts    # 自动保鲜检测服务（含 SSRF 防御）
-│   │   └── skillCardService.ts # 可视化卡片服务（SKILL.md → HTML,可选 AI 提炼）
+│   │   ├── skillCardService.ts # 可视化卡片服务（SKILL.md → HTML,可选 AI 提炼）
+│   │   └── cardStorageService.ts # 卡片本地持久化（~/.skills-manager/cards/）
 │   └── utils/
 │       ├── symlink.ts         # 软链接工具函数
 │       ├── validation.ts      # 路径/文件名校验
@@ -271,6 +272,7 @@ skills-manager/
 │   │   ├── ImportPage.tsx     # 导入中心页
 │   │   ├── AnalyticsPage.tsx  # 使用分析页（含反馈统计）
 │   │   ├── LifecyclePage.tsx  # 生命周期看板页
+│   │   ├── SkillCardsPage.tsx # 卡片库页（历史卡片网格 + 预览/删除）
 │   │   ├── HomePage.tsx       # 首页
 │   │   └── HelpPage.tsx       # 帮助中心页
 │   ├── stores/                # Zustand 状态管理
@@ -557,7 +559,12 @@ EOF
 | POST | `/api/eval-loop/stop` | 终止指定 loop |
 | GET | `/api/eval-loop/{history,active}` | 历史 / 进行中循环 |
 | POST | `/api/compare/skills` | 双 Skill Rubric + 内容 Diff（最多 5000 行） |
-| POST | `/api/skill-card/generate` | 生成一屏 HTML 可视化卡片（`includeAI` 可选；模型从 user-config 取，限频 15/min） |
+| POST | `/api/skill-card/generate` | 生成一屏 HTML 可视化卡片;默认自动持久化(`persist:false` 可关),响应带 `cardId/generatedAt`,限频 15/min |
+| GET | `/api/skill-card/list` | 卡片库元数据列表(不含 HTML/data 大字段) |
+| GET | `/api/skill-card/by-path?skillPath=` | 按 skillPath 查最近一次生成的卡片(Dialog 秒回显用,无则返回 `{card:null}`) |
+| GET | `/api/skill-card/:id` | 单张卡片完整 payload |
+| GET | `/api/skill-card/:id/view` | 直接返回 `text/html` + `CSP: sandbox`,可在新标签页打开 |
+| DELETE | `/api/skill-card/:id` | 删除单张卡片 |
 | POST | `/api/feedback` | 提交反馈（effective / ineffective / partial / suggestion） |
 | GET | `/api/feedback?skillPath=` | 查反馈（可按 skillPath 过滤） |
 | GET | `/api/feedback/stats` | 反馈统计聚合 |
