@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,7 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from '@/components/ui/dialog'
 import {
   AlertDialog,
@@ -28,26 +27,16 @@ import {
   Sparkles,
   Trash2,
   Eye,
-  Download,
-  Copy,
-  ExternalLink,
   Inbox,
   RefreshCw,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { skillCardApi, type SkillCardSummary, type StoredSkillCard } from '@/api/client'
+import CardPreview from '@/components/skills/CardPreview'
 
 function formatTimestamp(iso: string): string {
   const d = new Date(iso)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-const GRADE_COLORS: Record<string, string> = {
-  A: 'text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-950/50',
-  B: 'text-blue-700 bg-blue-100 dark:text-blue-300 dark:bg-blue-950/50',
-  C: 'text-yellow-700 bg-yellow-100 dark:text-yellow-300 dark:bg-yellow-950/50',
-  D: 'text-orange-700 bg-orange-100 dark:text-orange-300 dark:bg-orange-950/50',
-  F: 'text-red-700 bg-red-100 dark:text-red-300 dark:bg-red-950/50',
 }
 
 export default function SkillCardsPage() {
@@ -67,28 +56,21 @@ export default function SkillCardsPage() {
       const { cards } = await skillCardApi.list()
       setCards(cards)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '加载失败'
-      setError(msg)
+      setError(err instanceof Error ? err.message : '加载失败')
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => { void load() }, [load])
-
-  // Auto-refresh when the user navigates back to /cards or refocuses the
-  // tab. Without this the page stays mounted across React Router transitions
-  // and silently goes stale after the user generates a new card on /skills.
+  // Re-load on mount, on navigation back to /cards, and on tab refocus
+  // while we're on /cards. Single effect: split mount/location watchers
+  // both fire on initial render and double-fetch.
   const location = useLocation()
   useEffect(() => {
-    if (location.pathname === '/cards') void load()
-  }, [location.pathname, load])
-
-  useEffect(() => {
+    if (location.pathname !== '/cards') return
+    void load()
     const onVisible = () => {
-      if (document.visibilityState === 'visible' && location.pathname === '/cards') {
-        void load()
-      }
+      if (document.visibilityState === 'visible') void load()
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
@@ -124,38 +106,13 @@ export default function SkillCardsPage() {
     }
   }
 
-  const handleDownload = (card: StoredSkillCard) => {
-    const blob = new Blob([card.html], { type: 'text/html;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${card.skillName}-card.html`
-    a.click()
-    URL.revokeObjectURL(url)
-    toast.success('已下载')
-  }
-
-  const handleCopy = async (card: StoredSkillCard) => {
-    try {
-      await navigator.clipboard.writeText(card.html)
-      toast.success('HTML 源码已复制')
-    } catch {
-      toast.error('复制失败,请手动复制')
-    }
-  }
-
-  const handleOpenNewTab = (card: StoredSkillCard) => {
-    const blob = new Blob([card.html], { type: 'text/html;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    window.open(url, '_blank', 'noopener,noreferrer')
-  }
-
-  const filtered = query
-    ? cards.filter(c =>
-        c.skillName.toLowerCase().includes(query.toLowerCase()) ||
-        c.title.toLowerCase().includes(query.toLowerCase()),
-      )
-    : cards
+  const filtered = useMemo(() => {
+    if (!query) return cards
+    const q = query.toLowerCase()
+    return cards.filter(c =>
+      c.skillName.toLowerCase().includes(q) || c.title.toLowerCase().includes(q),
+    )
+  }, [cards, query])
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -230,7 +187,9 @@ export default function SkillCardsPage() {
                   </p>
                 </div>
                 {card.hasRubric && (
-                  <Badge className={GRADE_COLORS.A + ' shrink-0 text-[10px]'}>已评测</Badge>
+                  <Badge className="shrink-0 text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                    已评测
+                  </Badge>
                 )}
               </div>
 
@@ -274,7 +233,6 @@ export default function SkillCardsPage() {
         </div>
       )}
 
-      {/* Preview Dialog */}
       <Dialog open={!!preview} onOpenChange={(o) => { if (!o) setPreview(null) }}>
         <DialogContent className="sm:max-w-4xl max-h-[90vh] !flex !flex-col overflow-hidden">
           <DialogHeader>
@@ -287,38 +245,15 @@ export default function SkillCardsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 min-h-0 border border-border rounded-md bg-muted/30 overflow-hidden">
-            {preview && (
-              <iframe
-                title="卡片预览"
-                // sandbox="" (empty) = most restrictive: no scripts,
-                // no same-origin, no top-nav. Matches SkillCardDialog.
-                srcDoc={preview.html}
-                sandbox=""
-                className="w-full h-full border-0 bg-white"
-                style={{ minHeight: '480px' }}
-              />
-            )}
-          </div>
-
-          <DialogFooter className="flex-row flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => preview && handleCopy(preview)}>
-              <Copy className="mr-1 h-3.5 w-3.5" />
-              复制 HTML
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => preview && handleOpenNewTab(preview)}>
-              <ExternalLink className="mr-1 h-3.5 w-3.5" />
-              新标签页打开
-            </Button>
-            <Button size="sm" onClick={() => preview && handleDownload(preview)}>
-              <Download className="mr-1 h-3.5 w-3.5" />
-              下载 .html
-            </Button>
-          </DialogFooter>
+          {preview && (
+            <CardPreview
+              html={preview.html}
+              fileName={`${preview.skillName}-card.html`}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation */}
       <AlertDialog open={!!pendingDeleteId} onOpenChange={(o) => { if (!o) setPendingDeleteId(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>

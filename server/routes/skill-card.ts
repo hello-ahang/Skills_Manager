@@ -18,14 +18,8 @@ async function getActiveSourceDir(): Promise<string> {
 
 const router = Router();
 
-/**
- * POST /api/skill-card/generate
- * Body: { skillPath: string, includeAI?: boolean, persist?: boolean }
- * Returns: { html, data, cardId?, generatedAt? }
- *
- * AI model creds are read server-side (CLAUDE.md §红线 2).
- * Saved cards live in ~/.skills-manager/cards/ (see cardStorageService).
- */
+// AI model creds are read server-side via getDefaultModelConfig (CLAUDE.md
+// §红线 2). Persistence is opt-out via `persist: false`.
 router.post('/generate', async (req: Request, res: Response) => {
   try {
     const { skillPath, includeAI, persist } = req.body || {};
@@ -57,7 +51,6 @@ router.post('/generate', async (req: Request, res: Response) => {
       includeAI: includeAI !== false,
     });
 
-    // Persistence is default-on; callers can opt out with persist: false.
     let cardId: string | undefined;
     let generatedAt: string | undefined;
     if (persist !== false) {
@@ -73,11 +66,7 @@ router.post('/generate', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * GET /api/skill-card/list
- * Returns: { cards: CardSummary[] }
- * Cards are newest first; payload (html/data) NOT included.
- */
+// Summaries only (no html/data) — payload comes via GET /:id.
 router.get('/list', async (_req: Request, res: Response) => {
   try {
     const cards = await listCards();
@@ -88,15 +77,8 @@ router.get('/list', async (_req: Request, res: Response) => {
   }
 });
 
-/**
- * GET /api/skill-card/by-path?skillPath=...
- * Returns: { card: StoredCard | null }
- * Used by the dialog to show "last generated" instantly without paying
- * AI cost again.
- *
- * pathGuard runs over skillPath via PATH_FIELDS, so an out-of-roots query
- * returns 403 before we hit this handler.
- */
+// Cache lookup for the dialog so reopening a skill skips a fresh AI call.
+// pathGuard covers skillPath via PATH_FIELDS — out-of-roots is rejected upstream.
 router.get('/by-path', async (req: Request, res: Response) => {
   try {
     const skillPath = req.query.skillPath;
@@ -115,11 +97,6 @@ router.get('/by-path', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * GET /api/skill-card/:id
- * Returns: { card: StoredCard }
- * id must match uuid v4 pattern (validated in cardStorageService).
- */
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const card = await getCard(req.params.id as string);
@@ -134,12 +111,8 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * GET /api/skill-card/:id/view
- * Returns the raw HTML of a stored card so it can be opened directly in
- * a new browser tab. CSP sandbox header neutralizes any inline script
- * even though all user content is already escapeHtml-ed in the renderer.
- */
+// Raw HTML for new-tab opens. CSP sandbox header is a second layer behind
+// escapeHtml at render time — defense in depth, not the primary defense.
 router.get('/:id/view', async (req: Request, res: Response) => {
   try {
     const card = await getCard(req.params.id as string);
@@ -155,10 +128,6 @@ router.get('/:id/view', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * DELETE /api/skill-card/:id
- * Returns: { deleted: boolean }
- */
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const deleted = await deleteCard(req.params.id as string);

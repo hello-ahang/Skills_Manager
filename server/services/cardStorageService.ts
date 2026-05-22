@@ -95,11 +95,7 @@ function toSummary(card: StoredCard): CardSummary {
   };
 }
 
-/**
- * Persist a freshly generated card. Returns the new id. Also prunes older
- * cards for the same skillPath beyond MAX_PER_SKILL, and globally beyond
- * MAX_TOTAL.
- */
+/** Persist a card and prune anything beyond MAX_PER_SKILL / MAX_TOTAL. */
 export async function saveCard(
   skillPath: string,
   html: string,
@@ -158,16 +154,10 @@ export async function saveCard(
   return { id, generatedAt };
 }
 
-/**
- * List all stored cards, newest first.
- */
 export async function listCards(): Promise<CardSummary[]> {
   return readIndex();
 }
 
-/**
- * Load a single card by id. Returns null if not found.
- */
 export async function getCard(id: string): Promise<StoredCard | null> {
   if (!ID_RE.test(id)) return null;
   try {
@@ -179,10 +169,7 @@ export async function getCard(id: string): Promise<StoredCard | null> {
   }
 }
 
-/**
- * Find the most recent card for a given skillPath. Used by the dialog
- * "open with last result" path so users don't pay the AI cost twice.
- */
+/** Most recent card for `skillPath`, so the dialog can skip a fresh AI run. */
 export async function getLatestForSkillPath(skillPath: string): Promise<StoredCard | null> {
   const needle = normalizeSkillPath(skillPath);
   const index = await readIndex();
@@ -191,9 +178,6 @@ export async function getLatestForSkillPath(skillPath: string): Promise<StoredCa
   return getCard(match.id);
 }
 
-/**
- * Delete a card by id. No-op if id is unknown.
- */
 export async function deleteCard(id: string): Promise<boolean> {
   if (!ID_RE.test(id)) return false;
   const index = await readIndex();
