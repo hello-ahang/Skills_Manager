@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.1] - 2026-05-21
+
+### Security — 闭口 v2.1.0 review 暴露的剩余漏洞
+
+- **pathGuard 真正挂载**：v2.1.0 引入了 `pathGuard` 中间件但**从未在 `server/index.ts` 注册**，导致接受 `skillPath` 的接口仍可访问任意绝对路径。`/api` 现在统一走 `app.use('/api', pathGuard())`，并把 `skillPathA` / `skillPathB` 加入 `PATH_FIELDS` 覆盖 `/api/compare`。
+- **关闭 SSRF + Bearer 外泄**：`/api/fresh/suggestions`、`/api/compare/skills`、`/api/skill-rubric/{evaluate,batch}` 不再接受请求体里的 `baseUrl` / `apiKey` / `modelName`。服务端通过 `getDefaultModelConfig()` 从 `user-config.json` 自动选用模型，前端只发 `includeAI: true` 这种开关位。封堵 `baseUrl: "http://169.254.169.254/..."` 把 `Authorization` header 打到云元数据接口的攻击面。
+- **鉴权收紧**：`SM_AUTH_DISABLE` 必须同时配合 loopback `SM_HOST` 才豁免；`crypto.timingSafeEqual` 替代手写常时比较；token 仅接受 `X-SM-Token` / `Authorization: Bearer`，不再读 `?token=` query。`~/.skills-manager` 父目录改为 `chmod 0700`，`security.json` 保持 `chmod 0600`。
+- **解压炸弹防护**：`safeUnzip` 引入 `SAFE_UNZIP_LIMITS`（50000 entries / 2 GiB 总解压量 / 单文件 1 GiB）。pre-flight 校验 zip 头里的 `uncompressedSize`，post-decode 计数作为 backstop；非 `File`/`Directory` 类型 entry 一律 `autodrain`。
+- **per-IP 速率限制**：`/api` 全局 300/min、`/api/fresh/*` 10/min、`/api/backup/*` 5/min；`express.json` body 上限从 50mb 下调到 1mb。
+- **备份导出过滤升级**：`security.json` 排除从根级精确匹配改为 `endsWith('/security.json')` / `endsWith('\\security.json')`，防止嵌套层级里的 token 副本随导出泄出。
+- **保鲜检测私网防御**：`freshService.checkUrl` 从 `redirect: 'follow'` 改为 `redirect: 'manual'`，逐跳验证。所有 RFC1918 / loopback / `169.254.0.0/16` / IPv6 ULA / link-local（fc00::/fd00::/fe80::）都拒绝。
+
+### Reliability — 数据正确性
+
+- **`usage_stats` / `rubric_cache` → SQLite UPSERT**：之前用 JSON 文件做 read-modify-write，并发 `POST /api/radar/usage/increment` 会丢计数。现在两张表都进 `~/.skills-manager/db.sqlite`，用 `INSERT ... ON CONFLICT DO UPDATE`。启动时一次性从旧 JSON 迁移，原文件改名 `.bak-*`。
+- **`restoreVersion` 原子化**：先做 backup snapshot；再把目标快照写到 `<skillPath>.restore-tmp-*`；用 `rename` 把原目录挪到 `<skillPath>.old-*` 并 swap；任意环节失败回滚 `.old-*`。隐藏文件（`.git`、`.skill-meta` 等）跨 swap 保留。`versions/index.json` 改为 `tmp + rename` 原子写。
+- **`compareService` LCS 限界**：超过 5000 行直接 throw（200MB DP 表内存上限）。错误能从 `compareSkills` 透传，不再被外层 `try/catch` 静默吞掉。
+
+### Performance
+
+- `aggregateAllSkills` 内层 `fs.realpath` 原本 O(N²)（10k+ syscall on 100 skills × 100 versions），现在外层预建 `Map<realpath, version>`，内层 O(1)。
+- `analyticsService.parseSkillMeta` 加 mtime 感知缓存（模块级），`/api/analytics/dashboard` 不再每次重读全部 SKILL.md。
+- `analytics` / `feedback` 的 `autoClean` 限频到每 24h 一次（之前每个读请求都跑 DELETE）。
+
+### Frontend
+
+- `src/api/client.ts` 新增 `compareApi` / `lifecycleApi` / `skillRubricApi`，三处裸 `fetch('/api/...')` 调用（`SkillComparePanel`、`SkillHealthDialog`、`LifecyclePage`）下沉到统一封装。
+- `SkillsRadarPage.tsx` 855 → 513 行：抽出 `src/components/radar/AISearchSection.tsx`、`badges.tsx`。
+- `SkillComparePanel.tsx`：删除 render-time `setState` 反模式，改 `useEffect`；Dialog `onOpenChange` 现在尊重 `nextOpen` 参数。
+- `LifecyclePage.tsx`：`stageOverrides` 切换不再触发整页 refetch（拆开原始数据 fetch + `useMemo` 合并阶段 override）；localStorage 反序列化校验枚举值。
+- `SkillHealthDialog.tsx`：effect 依赖从 `report` 改为 `report?.skillPath`，避免父组件每次 render 传新对象时丢失展开态。
+- a11y：`<select>` 加 `id` + `<label htmlFor>`；`DialogContent` 补 `DialogDescription`；`LifecyclePage` 库选择器加 `aria-label`。
+- `radarStore` 的 `saveCachedSummary` / `saveCachedTags` 不再 fire-and-forget，失败 `toast.error`；`__all__` 抽常量 `ALL_DIRS_KEY`。
+
+### Hardening — 小修
+
+- `validation.ts`：`sanitizePath` 改为 `throw`（原实现 `replace(/\.\./g, '')` 是已知坏 sanitizer，被 `....//` 绕过）；`validateFileName` 拒绝 Windows 保留名（`CON`/`PRN`/`NUL`/`COM1-9`/`LPT1-9`）。
+- `safeParseJsonRecord` 抽到 `server/utils/json.ts`，`analyticsService` / `feedbackService` 复用。
+- `DELETE /api/feedback`（清空全部）现在要求 `?confirm=true`。
+
+### Tests
+
+- 测试数 44 → **87**（12 test files），`npm test` 一键全绿。
+- 新增回归测试锁住 v2.1.0 引入的安全不变量：
+  - `server/__regression__/pathGuard.integration.test.ts` — supertest 验证 `/api/fresh`、`/api/compare/skills`（A 端 + B 端）、`/api/feedback` 都对越界路径返回 `403`
+  - `server/__regression__/cors.test.ts` — 白名单 + dev loopback 正则 + 拒陌生 origin
+  - `server/__regression__/sql-params.test.ts` — 静态扫描所有 `db.prepare()`，禁止 `${...}` 模板字符串插值
+  - `server/__regression__/backup-no-token.test.ts` — `security.json` 排除谓词在根 / POSIX 嵌套 / Windows 嵌套都生效，且不过匹配
+- 扩展 `server/utils/safeUnzip.test.ts`：解压炸弹三类边界（entries / 总量 / 单文件）
+- 扩展 `server/middleware/auth.test.ts`：`security.json` 0600 + 父目录 0700 + Bearer 接受 + query token 拒绝
+- 新增 `server/services/{compare,feedback,fresh}Service.test.ts` 与 `versionService.test.ts` 扩展（restore 原子性 + UTF-8 中文不被误判二进制）
+
+### Migration Notes
+
+- 升级后首次启动会一次性把 `~/.skills-manager/usage-stats.json` 与 `rubric-cache.json` 导入 SQLite，原文件改名 `.bak-*` 保留。无需手工操作。
+- 接入方注意：`/api/fresh/suggestions`、`/api/compare/skills`、`/api/skill-rubric/{evaluate,batch}` 不再接受 body 里的 `baseUrl` / `apiKey` / `modelName`，请改用服务端 `defaultModelId` 配置；前端只发 `includeAI: true`。
+- 接入方注意：clear 全部反馈现在要求 `DELETE /api/feedback?confirm=true`。
+- 接入方注意：所有 `/api/*` 调用必须带 `X-SM-Token` 或 `Authorization: Bearer`，`?token=` 查询参数不再生效（首次浏览器打开除外）。
+
+---
+
 ## [2.1.0] - 2026-05-13
 
 ### Security — 关键漏洞修复（P0）

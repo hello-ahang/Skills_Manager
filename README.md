@@ -79,8 +79,8 @@ Skills 统一管理平台 — 为同时使用 Claude、Qoder、QoderWork、Openc
 
 ```
 前端: React 18 + TypeScript + Vite + Tailwind CSS v4 + shadcn/ui + Monaco Editor + Zustand
-后端: Node.js + Express.js + TypeScript (tsx)
-存储: JSON 本地文件（无需数据库）
+后端: Node.js + Express.js + TypeScript (tsx) + better-sqlite3
+存储: JSON 本地配置 + SQLite 事件/反馈/计数（~/.skills-manager/db.sqlite）
 ```
 
 ## 快速开始
@@ -178,8 +178,15 @@ skills-manager/
 ├── index.html
 │
 ├── server/                    # 后端代码
-│   ├── index.ts               # Express 入口
+│   ├── index.ts               # Express 入口（auth → pathGuard → rate-limit → routes）
+│   ├── cli.ts                 # 全局命令行入口
 │   ├── extensions.ts          # 扩展加载机制
+│   ├── db/
+│   │   └── sqlite.ts          # better-sqlite3 单例 + schema + JSONL 迁移
+│   ├── middleware/
+│   │   ├── auth.ts            # X-SM-Token / Bearer 鉴权（仅 header）
+│   │   ├── pathGuard.ts       # 路径白名单守卫（sourceDirs/projects 之内）
+│   │   └── rateLimit.ts       # 内存版 per-IP 限流
 │   ├── routes/
 │   │   ├── config.ts          # 配置 API
 │   │   ├── projects.ts        # 项目管理 API
@@ -188,7 +195,16 @@ skills-manager/
 │   │   ├── tools.ts           # 工具 API（导出等）
 │   │   ├── import.ts          # 导入中心 API
 │   │   ├── import-stream.ts   # 导入进度 SSE 端点
-│   │   └── publish.ts         # 发布集成 API
+│   │   ├── publish.ts         # 发布集成 API
+│   │   ├── radar.ts           # Skills 雷达 API
+│   │   ├── skill-lint.ts      # Lint 静态检测 API
+│   │   ├── sandbox.ts         # 测试沙箱 API
+│   │   ├── skill-rubric.ts    # Rubric 评测 API
+│   │   ├── eval-loop.ts       # Eval Loop SSE API
+│   │   ├── compare.ts         # Skill 对比 API
+│   │   ├── feedback.ts        # 使用反馈 API
+│   │   ├── fresh.ts           # 保鲜检测 API
+│   │   └── backup.ts          # 数据备份/恢复 API
 │   ├── services/
 │   │   ├── configService.ts   # 配置管理
 │   │   ├── fileService.ts     # 文件操作
@@ -200,14 +216,20 @@ skills-manager/
 │   │   ├── importHistoryService.ts  # 导入历史
 │   │   ├── publishService.ts  # 发布服务（Publish Target 注册）
 │   │   ├── subscriptionService.ts   # 订阅管理
+│   │   ├── analyticsService.ts # 使用分析（SQLite）
+│   │   ├── versionService.ts  # 版本快照（原子化 restore）
+│   │   ├── radarService.ts    # Skills 雷达聚合 + 排名（SQLite usage_stats / rubric_cache）
 │   │   ├── rubricService.ts   # Rubric 四维评测引擎
 │   │   ├── evalLoopService.ts # 评测-改进循环引擎
 │   │   ├── compareService.ts  # Skill 对比评测服务
-│   │   ├── feedbackService.ts # 使用反馈采集服务
-│   │   └── freshService.ts    # 自动保鲜检测服务
+│   │   ├── feedbackService.ts # 使用反馈采集服务（SQLite）
+│   │   └── freshService.ts    # 自动保鲜检测服务（含 SSRF 防御）
 │   └── utils/
 │       ├── symlink.ts         # 软链接工具函数
-│       └── validation.ts      # 输入验证
+│       ├── validation.ts      # 路径/文件名校验
+│       ├── safeUnzip.ts       # ZipSlip + 解压炸弹防护
+│       ├── logger.ts          # pino 结构化日志
+│       └── json.ts            # 安全 JSON 解析（safeParseJsonRecord）
 │
 ├── src/                       # 前端代码
 │   ├── main.tsx               # React 入口
@@ -224,10 +246,13 @@ skills-manager/
 │   │   │   ├── ProjectCard.tsx
 │   │   │   ├── ProjectFileBrowser.tsx  # 项目文件夹浏览弹框
 │   │   │   └── AddProjectModal.tsx
+│   │   ├── radar/
+│   │   │   ├── badges.tsx             # SourceBadge / TagBadge / GradeBadge
+│   │   │   └── AISearchSection.tsx    # 雷达页 AI 检索区（场景搜索 + ClawHub 检索）
 │   │   ├── skills/
 │   │   │   ├── FileTree.tsx           # 文件树（含 AI 优化/导出/别名管理）
 │   │   │   ├── Editor.tsx             # Monaco 编辑器 & Markdown 预览
-│   │   │   │   ├── AISkillGenerator.tsx   # AI 生成技能弹框（含品质锚定）
+│   │   │   ├── AISkillGenerator.tsx   # AI 生成技能弹框（含品质锚定）
 │   │   │   ├── AISkillOptimizer.tsx   # AI 优化技能弹框（DiffEditor 对比）
 │   │   │   ├── SkillHealthDialog.tsx  # 健康度弹框（四维雷达图 + Rubric 报告 + Eval Loop）
 │   │   │   ├── SkillComparePanel.tsx  # Skill 对比评测面板
@@ -247,7 +272,8 @@ skills-manager/
 │   ├── stores/                # Zustand 状态管理
 │   │   ├── configStore.ts     # 全局配置
 │   │   ├── projectStore.ts    # 项目状态
-│   │   └── skillsStore.ts     # Skills 状态
+│   │   ├── skillsStore.ts     # Skills 状态
+│   │   └── radarStore.ts      # Skills 雷达状态（搜索/摘要/标签）
 │   ├── hooks/                 # 自定义 Hooks
 │   └── types/                 # TypeScript 类型定义
 │
@@ -333,6 +359,59 @@ Skills Manager 提供了轻量级的扩展机制，允许开发者通过编写 `
 也可以在设置页面的"Provider 注册模式"中直接导入 `.js` 扩展文件，无需手动操作文件系统。
 
 详细开发指南请参阅 [extensions-guide/provider-guide.md](extensions-guide/provider-guide.md)。
+
+## 安全与运维
+
+服务默认监听 `127.0.0.1:3001`，所有 `/api/*` 端点都强制鉴权。下面是接入这套服务前需要知道的关键事实。
+
+### 鉴权（必读）
+
+启动时 Skills Manager 会在 `~/.skills-manager/security.json` 写入一个 128 位随机 token（文件 `chmod 0600`，父目录 `chmod 0700`）。所有 API 调用都必须带上：
+
+```bash
+# 推荐：X-SM-Token header
+curl -H "X-SM-Token: $TOKEN" http://127.0.0.1:3001/api/skills
+
+# 也接受标准的 Authorization Bearer
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3001/api/skills
+```
+
+**禁止从 `?token=` 查询参数读 token**——查询字符串会进 access log / 浏览器历史 / Referer header，等于明文外泄。CLI 在浏览器首次打开时通过 `?token=` 一次性传递，前端立刻把它存进 localStorage 并清掉 URL 参数；这是唯一例外。
+
+`/api/health` 是唯一豁免路径，可用于探活。
+
+只在以下情况可禁用鉴权：`SM_AUTH_DISABLE=1` **且** `SM_HOST` 为 loopback（`127.0.0.1` / `::1` / `localhost`）。任何一项不满足都强制 token。
+
+### 路径白名单
+
+`pathGuard` 中间件会校验任何 body / query 中带路径字段（`path`、`skillPath`、`skillPathA/B`、`paths[]`、`skillPaths[]` 等）的请求，确保它们都落在 `~/.skills-manager` 或用户配置的 `sourceDirs` / `projects` 路径之内。越界访问（如 `skillPath: "/etc/"`）返回 `403`。
+
+新增路由如果接受路径输入，**字段名必须出现在 `server/middleware/pathGuard.ts` 的 `PATH_FIELDS` 数组里**，否则等于绕过校验。
+
+### 速率限制
+
+| 范围 | 上限 | 触发返回 |
+|---|---|---|
+| 全部 `/api/*` | 300 / 分钟 / IP | `429` + `Retry-After` |
+| `/api/fresh/*`（外发 HTTP） | 10 / 分钟 / IP | `429` + 提示语 |
+| `/api/backup/*`（重 IO） | 5 / 分钟 / IP | `429` + 提示语 |
+
+限流是进程内 Map，单进程部署足够；多进程或反代后部署需要外接 redis 之类。
+
+### AI 模型凭据从哪来
+
+服务端**不接受**客户端传 `baseUrl` / `apiKey` / `modelName`。所有需要调 LLM 的端点（`/api/fresh/suggestions`、`/api/compare/skills`、`/api/skill-rubric/*`、`/api/eval-loop/*`）会从用户配置 `~/.skills-manager/user-config.json` 的 `defaultModelId` 自动选用模型。客户端只发 `includeAI: true` 这种开关位。
+
+这是为了堵 SSRF + Bearer 外泄——攻击者构造 `baseUrl: "http://169.254.169.254/..."` 就能让服务把 `Authorization: Bearer ...` 打到云元数据接口。
+
+### 数据备份
+
+| 操作 | 说明 |
+|---|---|
+| `POST /api/backup/export` | 流式导出 `~/.skills-manager/` 整个目录为 zip，**自动排除 `security.json`**（根级 + 任意嵌套层级）。 |
+| `POST /api/backup/import` | 上传 zip → 解压到 staging（`safeUnzip` 防 ZipSlip + 解压炸弹）→ 校验 → 替换数据。原数据自动备份到 `~/.skills-manager.bak-<时间戳>`，失败回滚。 |
+
+`safeUnzip` 的硬限制（见 `server/utils/safeUnzip.ts:SAFE_UNZIP_LIMITS`）：单文件 ≤ 1 GiB / 总解压量 ≤ 2 GiB / entry 数 ≤ 50000。超过即拒绝并回滚。
 
 ## 自定义 Rubric 模板
 
@@ -465,6 +544,30 @@ EOF
 | POST | `/api/radar/search` | AI 语义搜索：场景描述匹配 Skills |
 | POST | `/api/radar/summary` | AI 能力总览：分类统计所有 Skills |
 | POST | `/api/radar/tags` | AI 自动标签：批量生成 Skills 分类标签 |
+| POST | `/api/radar/usage/increment` | 累加 Skill 使用计数（SQLite UPSERT） |
+| GET / PUT | `/api/radar/cache/{summary,tags}` | 摘要/标签缓存读写 |
+| GET / POST | `/api/skill-rubric/templates` | 列出 / 保存自定义 Rubric 模板 |
+| POST | `/api/skill-rubric/evaluate` | 评测单个 Skill（`includeAI` 可选；模型从 user-config 取） |
+| POST | `/api/skill-rubric/batch` | 批量评测当前 sourceDir 下全部 Skills |
+| POST | `/api/eval-loop/start` | SSE：评测-改进循环（`includeAI` 必传） |
+| POST | `/api/eval-loop/stop` | 终止指定 loop |
+| GET | `/api/eval-loop/{history,active}` | 历史 / 进行中循环 |
+| POST | `/api/compare/skills` | 双 Skill Rubric + 内容 Diff（最多 5000 行） |
+| POST | `/api/feedback` | 提交反馈（effective / ineffective / partial / suggestion） |
+| GET | `/api/feedback?skillPath=` | 查反馈（可按 skillPath 过滤） |
+| GET | `/api/feedback/stats` | 反馈统计聚合 |
+| DELETE | `/api/feedback/:id` | 删除单条 |
+| DELETE | `/api/feedback?confirm=true` | 全部清空（必须带 `confirm=true`） |
+| POST | `/api/fresh/check` | 单 Skill 保鲜检测 |
+| POST | `/api/fresh/batch` | 批量保鲜 |
+| POST | `/api/fresh/suggestions` | AI 改进建议（模型从 user-config 取） |
+| POST | `/api/backup/export` | 流式导出 `~/.skills-manager/` 为 zip |
+| POST | `/api/backup/import` | 上传 zip → 验证 → 替换数据（带回滚） |
+| POST | `/api/skill-lint/check` | 单文件 Lint |
+| POST | `/api/sandbox/{run,generate}` | Skills 测试沙箱 / AI 生成场景 |
+
+> 全部端点要求 `X-SM-Token` 或 `Authorization: Bearer` header（见上文「安全与运维」）。
+> 响应 `403` ⇒ 路径不在白名单；`429` ⇒ 超限；`401` ⇒ token 缺失/错。
 
 ## 支持的 AI 工具
 
