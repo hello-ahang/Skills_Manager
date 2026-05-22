@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -74,6 +75,24 @@ export default function SkillCardsPage() {
   }, [])
 
   useEffect(() => { void load() }, [load])
+
+  // Auto-refresh when the user navigates back to /cards or refocuses the
+  // tab. Without this the page stays mounted across React Router transitions
+  // and silently goes stale after the user generates a new card on /skills.
+  const location = useLocation()
+  useEffect(() => {
+    if (location.pathname === '/cards') void load()
+  }, [location.pathname, load])
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && location.pathname === '/cards') {
+        void load()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [location.pathname, load])
 
   const handlePreview = async (id: string) => {
     setPreviewLoading(true)

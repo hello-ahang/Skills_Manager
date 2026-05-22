@@ -31,6 +31,15 @@ const MAX_TOTAL = 500;
 
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Normalize skillPath so Windows backslashes don't cause cache misses on
+// getLatestForSkillPath. The route layer joins with path.join which can
+// produce '\' on Win32, but cards saved earlier may have used '/' (or
+// vice versa across platforms / git sync). We canonicalize to forward
+// slashes both when writing and when looking up.
+function normalizeSkillPath(p: string): string {
+  return p.replace(/\\/g, '/');
+}
+
 export interface CardSummary {
   id: string;
   skillName: string;
@@ -105,7 +114,7 @@ export async function saveCard(
   const stored: StoredCard = {
     id,
     skillName: data.name,
-    skillPath,
+    skillPath: normalizeSkillPath(skillPath),
     title: data.title,
     aiUsed: data.aiUsed,
     hasRubric: !!data.rubric,
@@ -122,15 +131,18 @@ export async function saveCard(
   const index = await readIndex();
   index.unshift(toSummary(stored)); // newest first
 
-  // Prune per-skill: keep newest MAX_PER_SKILL for each skillPath
+  // Prune per-skill: keep newest MAX_PER_SKILL for each skillPath.
+  // Normalize per-key so historical entries with Windows backslashes get
+  // grouped with their new forward-slash siblings.
   const perSkillCount: Record<string, number> = {};
   const toKeep: CardSummary[] = [];
   const toRemove: CardSummary[] = [];
   for (const entry of index) {
-    const count = perSkillCount[entry.skillPath] || 0;
+    const key = normalizeSkillPath(entry.skillPath);
+    const count = perSkillCount[key] || 0;
     if (count < MAX_PER_SKILL && toKeep.length < MAX_TOTAL) {
       toKeep.push(entry);
-      perSkillCount[entry.skillPath] = count + 1;
+      perSkillCount[key] = count + 1;
     } else {
       toRemove.push(entry);
     }
@@ -176,8 +188,9 @@ export async function getCard(id: string): Promise<StoredCard | null> {
  * "open with last result" path so users don't pay the AI cost twice.
  */
 export async function getLatestForSkillPath(skillPath: string): Promise<StoredCard | null> {
+  const needle = normalizeSkillPath(skillPath);
   const index = await readIndex();
-  const match = index.find(c => c.skillPath === skillPath);
+  const match = index.find(c => normalizeSkillPath(c.skillPath) === needle);
   if (!match) return null;
   return getCard(match.id);
 }

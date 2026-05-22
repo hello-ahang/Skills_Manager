@@ -47,7 +47,6 @@ export default function SkillCardDialog({ open, onOpenChange, skillPath, skillNa
   const [html, setHtml] = useState<string>('')
   const [data, setData] = useState<SkillCardData | null>(null)
   const [useAI, setUseAI] = useState(true)
-  const [cardId, setCardId] = useState<string | null>(null)
   const [cachedAt, setCachedAt] = useState<string | null>(null)
   const [fromCache, setFromCache] = useState(false)
 
@@ -61,14 +60,12 @@ export default function SkillCardDialog({ open, onOpenChange, skillPath, skillNa
       const result = await skillCardApi.generate({ skillPath: path, includeAI })
       setHtml(result.html)
       setData(result.data)
-      setCardId(result.cardId || null)
       setCachedAt(result.generatedAt || null)
     } catch (err) {
       const msg = err instanceof Error ? err.message : '生成失败'
       setError(msg)
       setHtml('')
       setData(null)
-      setCardId(null)
     } finally {
       setLoading(false)
     }
@@ -88,7 +85,6 @@ export default function SkillCardDialog({ open, onOpenChange, skillPath, skillNa
         if (card) {
           setHtml(card.html)
           setData(card.data)
-          setCardId(card.id)
           setCachedAt(card.generatedAt)
           setFromCache(true)
           setError(null)
@@ -113,7 +109,6 @@ export default function SkillCardDialog({ open, onOpenChange, skillPath, skillNa
     if (!open) {
       setHtml('')
       setData(null)
-      setCardId(null)
       setCachedAt(null)
       setFromCache(false)
       setError(null)
@@ -240,7 +235,6 @@ export default function SkillCardDialog({ open, onOpenChange, skillPath, skillNa
           <div className="mr-auto text-xs text-muted-foreground self-center">
             {data?.aiUsed ? '由 AI 提炼' : data ? '静态提取' : ''}
             {data?.rubric && ` · 质量分 ${data.rubric.overall} (${data.rubric.grade})`}
-            {cardId && ' · 已保存到卡片库'}
           </div>
           <Button variant="outline" size="sm" onClick={handleCopy} disabled={!html}>
             <Copy className="mr-1 h-3.5 w-3.5" />
