@@ -1,255 +1,167 @@
-import { useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { toast } from 'sonner'
-import { backupApi } from '@/api/client'
+import { configApi, projectsApi, skillCardApi } from '@/api/client'
+import { groupCardsBySkill } from '@/lib/cardGrouping'
 import {
-  AlertTriangle,
-  BarChart3,
-  Download,
-  GitBranch,
-  HardDriveDownload,
-  HardDriveUpload,
-  Lightbulb,
-  Palette,
-  Pencil,
-  Rocket,
-  Sparkles,
-  Wand2,
-  Search,
   ArrowRight,
+  AlertTriangle,
 } from 'lucide-react'
+
+interface KpiState {
+  sources: number | null
+  projects: number | null
+  cards: number | null
+}
 
 export default function HomePage() {
   const navigate = useNavigate()
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const [isExporting, setIsExporting] = useState(false)
-  const [isImporting, setIsImporting] = useState(false)
+  const [kpis, setKpis] = useState<KpiState>({ sources: null, projects: null, cards: null })
 
-  const handleExport = async () => {
-    if (isExporting) return
-    setIsExporting(true)
-    try {
-      await backupApi.exportBackup()
-      toast.success('备份已开始下载')
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '导出失败'
-      toast.error(message)
-    } finally {
-      setIsExporting(false)
-    }
-  }
+  // KPI fetch — fire-and-forget, fail individually so one outage doesn't
+  // strand the whole hero. Display "—" for any field that errored.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const [cfg, projs, cards] = await Promise.allSettled([
+        configApi.get(),
+        projectsApi.getAll(),
+        skillCardApi.list(),
+      ])
+      if (cancelled) return
+      // Cards KPI counts Skills (groups), not stored card files — same
+      // semantics as the /cards page so the number matches what the user
+      // sees there. Multiple versions of one Skill = one card on Home.
+      const cardSummaries = cards.status === 'fulfilled' ? (cards.value?.cards ?? []) : null
+      setKpis({
+        sources: cfg.status === 'fulfilled' ? (cfg.value?.sourceDirs?.length ?? 0) : null,
+        projects: projs.status === 'fulfilled' ? (projs.value?.projects?.length ?? 0) : null,
+        cards: cardSummaries === null ? null : groupCardsBySkill(cardSummaries).length,
+      })
+    })()
+    return () => { cancelled = true }
+  }, [])
 
-  const handleImportClick = () => {
-    if (isImporting) return
-    fileInputRef.current?.click()
-  }
-
-  const handleImportChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    if (!confirm(`确定从 "${file.name}" 恢复数据吗？\n\n当前 ~/.skills-manager/ 会被自动备份为 .bak-* 目录。`)) {
-      return
-    }
-    setIsImporting(true)
-    try {
-      const result = await backupApi.importBackup(file)
-      toast.success(result.message || '已恢复，请重启 Skills Manager')
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '导入失败'
-      toast.error(message)
-    } finally {
-      setIsImporting(false)
-    }
-  }
+  const fmt = (n: number | null) => n === null ? '—' : String(n)
 
   return (
-    <div className="mx-auto max-w-4xl space-y-3">
+    <div className="mx-auto max-w-5xl px-6 py-10 space-y-14">
       {/* Hero */}
-      <div className="text-center space-y-1">
-        <h1 className="text-xl font-bold">Skills Manager</h1>
-        <p className="text-xs text-muted-foreground">多 AI 工具 Skills 统一管理平台</p>
-      </div>
-
-      {/* 痛点 / 解法 / 步骤 */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card>
-          <CardContent className="pt-3 pb-3 space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm">😣</span>
-              <h3 className="font-semibold text-xs text-destructive">痛点</h3>
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              多个 AI 编程工具各自维护 Skills，内容分散、难以同步，重复劳动多。
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-3 pb-3 space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <Lightbulb className="h-3.5 w-3.5 text-primary" />
-              <h3 className="font-semibold text-xs text-primary">解法</h3>
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              统一源目录管理 Skills，通过软链接一键同步到各项目，一处维护、多处生效。
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-3 pb-3 space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <Rocket className="h-3.5 w-3.5 text-primary" />
-              <h3 className="font-semibold text-xs text-primary">步骤</h3>
-            </div>
-            <div className="text-[11px] text-muted-foreground leading-relaxed space-y-0.5">
-              <p>① Skills 库添加源目录 →</p>
-              <p>② 添加项目 →</p>
-              <p>③ 绑定源目录 →</p>
-              <p>④ 绑定/解除后重启项目程序。</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* 软链接架构示意图 */}
-      <Card>
-        <CardContent className="pt-3 pb-3">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-semibold">软链接管理 Skills 方案</span>
-          </div>
-          <div className="flex items-center justify-center gap-3 text-[11px]">
-            {/* 源目录 */}
-            <div className="border rounded-md p-2 bg-secondary text-center">
-              <p className="font-semibold text-primary">📁 Skills 源目录</p>
-              <p className="text-muted-foreground">统一维护，一处编辑</p>
-            </div>
-
-            {/* 箭头 */}
-            <div className="flex flex-col items-center gap-0.5 text-muted-foreground">
-              <span>软链接同步</span>
-              <span className="text-base">→</span>
-            </div>
-
-            {/* 项目列表 - 横向排列 */}
-            <div className="flex gap-2">
-              <div className="border rounded-md px-2 py-1.5 bg-secondary text-center">
-                <p className="font-semibold text-foreground">🖥 项目 A</p>
-                <p className="text-muted-foreground">.cursor/rules/</p>
-              </div>
-              <div className="border rounded-md px-2 py-1.5 bg-secondary text-center">
-                <p className="font-semibold text-foreground">🖥 项目 B</p>
-                <p className="text-muted-foreground">.windsurf/rules/</p>
-              </div>
-              <div className="border rounded-md px-2 py-1.5 bg-secondary text-center">
-                <p className="font-semibold text-foreground">🖥 项目 C</p>
-                <p className="text-muted-foreground">.github/copilot/</p>
-              </div>
-            </div>
-          </div>
-          <p className="text-center text-[11px] text-muted-foreground mt-2">源目录修改后，所有已绑定项目自动同步生效，无需重复操作</p>
-        </CardContent>
-      </Card>
-
-      {/* 更多亮点 + 注意事项 并排 */}
-      <div className="grid grid-cols-2 gap-3">
-        <Card>
-          <CardContent className="pt-3 pb-3">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs font-semibold">更多亮点</span>
-            </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-              <div className="flex items-center gap-1.5">
-                <Pencil className="h-3 w-3 text-primary shrink-0" />
-                <p className="text-[11px] text-muted-foreground">在线编辑，实时预览</p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Wand2 className="h-3 w-3 text-primary shrink-0" />
-                <p className="text-[11px] text-muted-foreground">AI 智能生成 Skills</p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Search className="h-3 w-3 text-primary shrink-0" />
-                <p className="text-[11px] text-muted-foreground">AI 检查/优化 Skills</p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <GitBranch className="h-3 w-3 text-primary shrink-0" />
-                <p className="text-[11px] text-muted-foreground">版本管理，快照回滚</p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <BarChart3 className="h-3 w-3 text-primary shrink-0" />
-                <p className="text-[11px] text-muted-foreground">使用分析，数据洞察</p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Download className="h-3 w-3 text-primary shrink-0" />
-                <p className="text-[11px] text-muted-foreground">导入中心，多源导入 Skills</p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Palette className="h-3 w-3 text-primary shrink-0" />
-                <p className="text-[11px] text-muted-foreground">多主题支持，深色模式</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-primary/30 bg-muted/50">
-          <CardContent className="pt-3 pb-3">
-            <div className="flex items-center gap-1.5 mb-2">
-              <AlertTriangle className="h-3.5 w-3.5 text-primary shrink-0" />
-              <span className="text-xs font-semibold text-primary">注意事项</span>
-            </div>
-            <ul className="text-[11px] text-muted-foreground space-y-1 ml-4 list-disc">
-              <li>悟空 Skills 必须经过审核，本产品不支持悟空。</li>
-              <li>项目绑定 Skills 库后，原有 Skills 文件会移动到备份文件夹中。</li>
-            </ul>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* 数据备份与恢复 */}
-      <Card>
-        <CardContent className="pt-3 pb-3">
-          <div className="flex items-center gap-2 mb-2">
-            <HardDriveDownload className="h-3.5 w-3.5 text-primary" />
-            <span className="text-xs font-semibold">数据备份与恢复</span>
-          </div>
-          <p className="text-[11px] text-muted-foreground mb-2">
-            将 ~/.skills-manager/ 下的版本/反馈/评测/订阅等数据打包导出，或从备份恢复（导入会自动备份当前数据为 .bak-* 目录）。
+      <section className="space-y-6">
+        <h1 className="font-mono text-5xl md:text-6xl font-bold tracking-tighter leading-[0.95]">
+          Skills.<br />
+          Manager<span className="cursor-blink text-violet-600 dark:text-violet-400">_</span>
+        </h1>
+        <div className="space-y-1.5 max-w-xl">
+          <p className="text-base md:text-lg text-foreground/80 leading-relaxed">
+            一份 Skill,所有 AI 工具同时拿到。
           </p>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={handleExport} disabled={isExporting} className="gap-1.5">
-              <HardDriveDownload className="h-3.5 w-3.5" />
-              {isExporting ? '导出中…' : '导出全量备份'}
-            </Button>
-            <Button size="sm" variant="outline" onClick={handleImportClick} disabled={isImporting} className="gap-1.5">
-              <HardDriveUpload className="h-3.5 w-3.5" />
-              {isImporting ? '恢复中…' : '从备份恢复'}
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".zip"
-              className="hidden"
-              onChange={handleImportChange}
-            />
-          </div>
-        </CardContent>
-      </Card>
+          <p className="font-mono text-xs text-muted-foreground tracking-wider uppercase">
+            for Cursor &middot; Claude Code &middot; Windsurf &middot; Copilot
+          </p>
+        </div>
+        <div className="flex items-center gap-3 pt-2">
+          <Button
+            size="default"
+            onClick={() => navigate('/skills')}
+            className="bg-foreground text-background hover:bg-foreground/90 gap-2 font-medium"
+          >
+            进入 Skills 库
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+          <Button
+            size="default"
+            variant="outline"
+            onClick={() => navigate('/projects')}
+            className="gap-2"
+          >
+            项目管理
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </section>
 
-      {/* Quick Actions */}
-      <div className="flex items-center justify-center gap-3">
-        <Button size="sm" onClick={() => navigate('/skills')} className="gap-1.5">
-          <Sparkles className="h-3.5 w-3.5" />
-          进入 Skills 库
-          <ArrowRight className="h-3 w-3" />
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => navigate('/projects')} className="gap-1.5">
-          进入项目管理
-          <ArrowRight className="h-3 w-3" />
-        </Button>
+      {/* KPIs */}
+      <section className="space-y-3">
+        <SectionLabel>STATUS</SectionLabel>
+        <div className="grid grid-cols-3 gap-px bg-border rounded-md overflow-hidden">
+          <Kpi value={fmt(kpis.sources)} label="源目录" />
+          <Kpi value={fmt(kpis.projects)} label="项目" />
+          <Kpi value={fmt(kpis.cards)} label="卡片" />
+        </div>
+      </section>
+
+      {/* Workflow */}
+      <section className="space-y-4">
+        <SectionLabel>WORKFLOW</SectionLabel>
+        <div className="flex items-stretch gap-0">
+          <Step n="01" label="添加源目录" hint="Skills 库" />
+          <Connector />
+          <Step n="02" label="添加项目" hint="项目管理" />
+          <Connector />
+          <Step n="03" label="绑定" hint=".cursor/rules/" />
+          <Connector />
+          <Step n="04" label="重启 IDE" hint="" />
+        </div>
+      </section>
+
+      {/* Notes */}
+      <section className="space-y-3">
+        <SectionLabel>NOTES</SectionLabel>
+        <ul className="text-xs text-muted-foreground space-y-2 pl-1">
+          <li className="flex items-start gap-2">
+            <AlertTriangle className="h-3 w-3 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
+            <span>悟空 Skills 必须经过审核,本产品不支持悟空。</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <AlertTriangle className="h-3 w-3 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
+            <span>项目绑定 Skills 库后,原有 Skills 文件会移动到备份文件夹中。</span>
+          </li>
+        </ul>
+      </section>
+    </div>
+  )
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        {children}
+      </span>
+      <div className="flex-1 h-px bg-border" />
+    </div>
+  )
+}
+
+function Kpi({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="bg-background px-5 py-4 flex flex-col gap-1">
+      <span className="font-mono text-3xl md:text-4xl font-semibold tracking-tight tabular-nums">
+        {value}
+      </span>
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+    </div>
+  )
+}
+
+function Step({ n, label, hint }: { n: string; label: string; hint: string }) {
+  return (
+    <div className="flex-1 min-w-0 space-y-1.5">
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-[10px] text-muted-foreground tracking-wider">{n}</span>
+        <div className="h-px flex-1 bg-border" />
       </div>
+      <p className="text-sm text-foreground font-medium truncate">{label}</p>
+      {hint && <p className="font-mono text-[10px] text-muted-foreground truncate">{hint}</p>}
+    </div>
+  )
+}
+
+function Connector() {
+  return (
+    <div className="w-6 flex items-center justify-center text-muted-foreground/50 self-center pt-3">
+      <span className="font-mono text-xs">→</span>
     </div>
   )
 }
