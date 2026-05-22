@@ -1,10 +1,10 @@
 import fs from 'fs-extra';
 import path from 'path';
-import { parseYamlField, parseYamlList } from '../utils/yamlUtils.js';
 import { getDefaultModelConfig } from './configService.js';
 import { loadRubricCache } from './radarService.js';
 import { getVersionHistory } from './versionService.js';
 import { log } from '../utils/logger.js';
+import { parseSkillMd, type ParsedSkillMd } from '../utils/skillMd.js';
 import { renderCardHtml, escapeHtml as escapeHtmlImpl, formatCardDate } from './skillCardTemplate.js';
 
 // Re-export render helpers for callers and tests that already import them
@@ -54,36 +54,9 @@ export interface SkillCardResult {
   data: SkillCardData;
 }
 
-interface ParsedSkill {
-  raw: string;
-  frontmatter: string | null;
-  body: string;
-  name?: string;
-  description?: string;
-  related: string[];
-}
-
-// ==================== SKILL.md parsing ====================
-
-async function readSkillMd(skillDir: string): Promise<ParsedSkill | null> {
-  const skillMdPath = path.join(skillDir, 'SKILL.md');
-  if (!await fs.pathExists(skillMdPath)) return null;
-
-  const raw = await fs.readFile(skillMdPath, 'utf-8');
-  const fmMatch = raw.match(/^---\s*\n([\s\S]*?)\n---/);
-  if (!fmMatch) {
-    return { raw, frontmatter: null, body: raw, related: [] };
-  }
-
-  const frontmatter = fmMatch[1];
-  const body = raw.slice(fmMatch[0].length);
-  const nameMatch = frontmatter.match(/^name:\s*(.+)$/m);
-  const name = nameMatch ? nameMatch[1].trim().replace(/^['"]|['"]$/g, '') : undefined;
-  const description = parseYamlField(frontmatter, 'description') || undefined;
-  const related = parseYamlList(frontmatter, 'related');
-
-  return { raw, frontmatter, body, name, description, related };
-}
+// SKILL.md parsing delegated to utils/skillMd.ts; ParsedSkill is a local
+// alias so this file's signatures stay stable.
+type ParsedSkill = ParsedSkillMd;
 
 /**
  * List markdown files in `<skillDir>/references/` together with their first
@@ -488,7 +461,7 @@ export async function generateSkillCard(
   skillDir: string,
   opts: GenerateCardOptions = {},
 ): Promise<SkillCardResult> {
-  const parsed = await readSkillMd(skillDir);
+  const parsed = await parseSkillMd(skillDir);
   if (!parsed) {
     throw new Error(`SKILL.md not found at ${skillDir}`);
   }

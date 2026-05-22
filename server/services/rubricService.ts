@@ -2,6 +2,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import os from 'os';
 import { parseYamlField } from '../utils/yamlUtils.js';
+import { parseSkillMd, type ParsedSkillMd } from '../utils/skillMd.js';
 
 // ==================== Types ====================
 // Rubric service uses its own compact type definitions internally.
@@ -71,35 +72,10 @@ const PRIORITY_WEIGHT: Record<RubricPriority, number> = {
 
 const RUBRIC_TEMPLATES_DIR = path.join(os.homedir(), '.skills-manager', 'rubric-templates');
 
-// ==================== SKILL.md Parser (independent) ====================
-
-interface ParsedSkillMd {
-  raw: string;
-  frontmatter: string | null;
-  body: string;
-  name?: string;
-  description?: string;
-}
-
-async function parseSkillMdForRubric(skillDir: string): Promise<ParsedSkillMd | null> {
-  const skillMdPath = path.join(skillDir, 'SKILL.md');
-  if (!await fs.pathExists(skillMdPath)) return null;
-
-  const raw = await fs.readFile(skillMdPath, 'utf-8');
-  const fmMatch = raw.match(/^---\s*\n([\s\S]*?)\n---/);
-
-  if (!fmMatch) {
-    return { raw, frontmatter: null, body: raw };
-  }
-
-  const frontmatter = fmMatch[1];
-  const body = raw.slice(fmMatch[0].length);
-  const nameMatch = frontmatter.match(/^name:\s*(.+)$/m);
-  const name = nameMatch ? nameMatch[1].trim().replace(/^['"]|['"]$/g, '') : undefined;
-  const description = parseYamlField(frontmatter, 'description');
-
-  return { raw, frontmatter, body, name, description };
-}
+// SKILL.md parsing now lives in server/utils/skillMd.ts (shared with the
+// card builder). The canonical type is ParsedSkillMd; we re-alias here as
+// the local name so the rest of this file reads unchanged.
+const parseSkillMdForRubric = parseSkillMd;
 
 // ==================== Default Rubric Template ====================
 

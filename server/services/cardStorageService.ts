@@ -17,6 +17,7 @@ import path from 'path';
 import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import type { SkillCardData } from './skillCardService.js';
+import { atomicWriteJson } from '../utils/json.js';
 import { log } from '../utils/logger.js';
 
 // Resolved per-call so tests can override SM_CARDS_DIR in beforeEach.
@@ -72,9 +73,7 @@ async function readIndex(): Promise<CardSummary[]> {
 
 async function writeIndex(entries: CardSummary[]): Promise<void> {
   await ensureDir();
-  const tmpPath = `${indexPath()}.tmp-${process.pid}-${Date.now()}`;
-  await fs.writeJson(tmpPath, entries, { spaces: 2 });
-  await fs.rename(tmpPath, indexPath());
+  await atomicWriteJson(indexPath(), entries);
 }
 
 function cardPath(id: string): string {

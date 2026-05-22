@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import type { SkillVersion, VersionFile, VersionDetail, VersionDiff } from '../../src/types/index.js';
+import { atomicWriteJson } from '../utils/json.js';
 
 const USER_CONFIG_DIR = path.join(os.homedir(), '.skills-manager');
 const VERSIONS_DIR = path.join(USER_CONFIG_DIR, 'versions');
@@ -32,11 +33,7 @@ async function readIndex(): Promise<SkillVersion[]> {
 
 async function writeIndex(versions: SkillVersion[]): Promise<void> {
   await ensureDirs();
-  // Atomic write: tmp file + rename. Prevents partial/concurrent writes from
-  // corrupting index.json when two createVersion calls race.
-  const tmpPath = `${INDEX_PATH}.tmp-${process.pid}-${Date.now()}`;
-  await fs.writeJson(tmpPath, versions, { spaces: 2 });
-  await fs.rename(tmpPath, INDEX_PATH);
+  await atomicWriteJson(INDEX_PATH, versions);
 }
 
 function looksBinary(buffer: Buffer): boolean {
