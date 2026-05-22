@@ -79,6 +79,7 @@ src/api/client.ts               # 前端 API 封装（compareApi / lifecycleApi 
 
 ## Tech debt（已知，但本次会话没动）
 
-- `src/pages/SkillsPage.tsx`（1080 行）、`src/components/skills/AISkillGenerator.tsx`（930 行）超 800 行 cap，需要拆分。`SkillsRadarPage.tsx` 已拆到 513 行。
+- `src/pages/SkillsPage.tsx`（1080 行）、`src/components/skills/AISkillGenerator.tsx`（930 行）超 800 行 cap，需要拆分。`SkillsRadarPage.tsx` 已拆到 513 行，`skillCardService.ts` 已拆到 523 行（模板抽到 `skillCardTemplate.ts`）。
 - `src/api/client.ts` 仍有 ~25 处 `any`（review 报告 H13），新增代码请显式类型。
 - `tsconfig.app.json` 的 `"ignoreDeprecations": "6.0"` 在 tsc 5.9 报警但不阻塞构建（exit 0）；升级 tsc 6.x 后改回。
+- **safeUnzip race（已知,跟踪中）**：`server/utils/safeUnzip.ts` 的 `'close'` 事件可能在 `fs.ensureDir.then(...)` 还在 microtask 队列时触发，导致 `'single entry exceeds limit'` 类的 fail() 抢不过 resolve()，promise 提前 resolve 为 `{written:0,skipped:[]}`。表现为 `safeUnzip.test.ts` 的「single entry exceeds limit」测试在 vitest 默认 worker 并发模式下间歇失败,`vitest run --no-file-parallelism` 稳定通过。临时缓解：CI 用串行模式跑测试；根因修复：在 `safeUnzipFromStream` 加 in-flight write counter,所有 writer `finish` 之前不让 'close' resolve。

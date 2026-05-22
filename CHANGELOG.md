@@ -9,37 +9,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added — Skill 可视化卡片 + 持久化 + 卡片库
+### Added — Skill 可视化卡片(含持久化 + 「卡片库」页面)
 
-- **新功能**:Skills 库文件树每个 Skill 节点的下拉菜单新增「生成可视化卡片」项。点击后弹出 Dialog,自动读取 SKILL.md + `references/` 摘要,可选调用默认 LLM 把技术 description 提炼为面向**非技术同事**的「一句话价值 + 能力点 + 适用场景 + 示例」一屏 HTML 卡片。
-- **交付形式**:Dialog 内 `<iframe srcDoc sandbox="">` 实时预览(隔离样式,沙箱防 XSS 逃逸),底部三按钮:「下载 .html」「复制 HTML 源码」「新标签页打开」。生成的 HTML **完全自包含**(内联 CSS / inline SVG / 系统字体),双击文件直接可看,无外链依赖。
-- **AI 开关**:Dialog 顶部「使用 AI 提炼文案」开关默认开;关闭后改走纯静态抽取(从 frontmatter / H2 标题 / 触发词 pattern 提取),也能生成可用卡片。开关切换不自动重新生成——用户显式点「重新生成」才花 AI 调用。
-- **质量分嵌入**:若 `rubric_cache` 已有该 Skill 的 Rubric 评测分,卡片右上角自动渲染 inline SVG 圆环 gauge 显示分数 + 等级色;无缓存则不显示。
-- **暗色兼容**:卡片 CSS 含 `@media (prefers-color-scheme: dark)` 一套主题变量,跟随系统暗色模式自动切换。
+把 Skill 一键转成一屏可读的 HTML 卡片,面向**非技术同事**——产品/业务方读不懂 SKILL.md,但能看懂卡片。
 
-### Added — 服务端持久化 + 「卡片库」页面
+#### 用户视角
 
-- **本地持久化**:每次生成的卡片自动落盘到 `~/.skills-manager/cards/<uuid>.json`,索引 `cards/index.json` 记录元数据。**刷新页面或重启 sm 都不会丢失,也不会再次触发 AI 调用**。同一 Skill 保留最近 5 条历史,全局上限 500 条,旧的自动淘汰。
-- **秒级回显**:Dialog 打开时先调 `GET /api/skill-card/by-path?skillPath=` 拿最近一次结果,命中即瞬时渲染并显示「上次生成于 X 分钟前 · 点「重新生成」刷新」紫色 chip;未命中再走 generate。
-- **「卡片库」页面**:侧边栏新增「卡片库」入口(`/cards`,LayoutDashboard 图标)。网格视图,支持按 Skill 名/标题搜索;每张卡片显示 AI/已评测标识和生成时间;每张卡片可预览(iframe + 复制/下载/新标签页)和删除(AlertDialog 确认)。
-- **新增 API**:
-  - `POST /api/skill-card/generate` — 入参 `{ skillPath, includeAI?, persist? }`;`persist` 默认 `true`;出参带 `cardId` + `generatedAt`。限频 15/min。
-  - `GET /api/skill-card/list` — 卡片库元数据列表(不含 HTML/data)
-  - `GET /api/skill-card/by-path?skillPath=` — 按路径查最近一次缓存(给 Dialog 用)
-  - `GET /api/skill-card/:id` — 完整 payload
-  - `GET /api/skill-card/:id/view` — 直接返回 `text/html`,带 `Content-Security-Policy: sandbox` 头,新标签页可用
-  - `DELETE /api/skill-card/:id`
-- **安全**:AI 凭据严格走 `getDefaultModelConfig()`,body 不接受 `baseUrl/apiKey/modelName`(沿用 v2.1.1 SSRF 防御模型)。`id` 在 service 层用 uuid v4 正则严格校验,杜绝路径穿越;`by-path` 的 `skillPath` 已在 `PATH_FIELDS` 内,pathGuard 自动覆盖。
+- **入口**:Skills 库文件树每个 Skill 节点的下拉菜单新增「生成可视化卡片」项。点击弹出 Dialog,自动读 SKILL.md + `references/` 摘要,默认调用默认 LLM 把 description 提炼为「一句话价值 + 能力点 + 适用场景 + 示例」。
+- **交付形式**:Dialog 内 `<iframe srcDoc sandbox="">` 实时预览(沙箱防 XSS),底部三按钮:「下载 .html」「复制 HTML 源码」「新标签页打开」。生成的 HTML **完全自包含**(内联 CSS / inline SVG / 系统字体),双击 .html 文件直接可看,无外链依赖。
+- **AI 开关**:Dialog 顶部「使用 AI 提炼文案」开关默认开;关闭后走静态抽取(frontmatter / H2 / 触发词 pattern),也能生成可用卡片。开关切换不自动重新生成——用户显式点「重新生成」才花 AI 调用。
+- **质量分嵌入**:若 `rubric_cache` 已有该 Skill 的 Rubric 评测分,卡片右上角自动渲染 inline SVG 圆环 gauge(分数 + 等级色)。
+- **暗色兼容**:卡片 CSS 含 `@media (prefers-color-scheme: dark)` 一套主题变量。
 
-### 新增文件
+#### 持久化
 
-- 后端:`server/services/skillCardService.ts`(extract + AI + render)、`server/services/cardStorageService.ts`(文件持久化层)、`server/routes/skill-card.ts`
-- 前端:`src/components/skills/SkillCardDialog.tsx`、`src/pages/SkillCardsPage.tsx`、`src/api/client.ts` 加 `skillCardApi`
-- 测试:`server/services/skillCardService.test.ts`(23 单测)、`server/services/cardStorageService.test.ts`(11 单测)、`server/__regression__/skill-card.integration.test.ts`(pathGuard 集成)
+- **自动落盘**:每次生成的卡片自动写到 `~/.skills-manager/cards/<uuid>.json`,索引 `cards/index.json` 记录元数据。**刷新页面或重启 sm 都不丢失,也不会再触发 AI 调用**。同一 Skill 保留最近 5 条历史,全局上限 500 条,旧的自动淘汰。
+- **秒级回显**:Dialog 打开时先调 `GET /api/skill-card/by-path?skillPath=` 拿最近一次结果,命中即瞬时渲染并显示「上次生成于 X 分钟前 · 点「重新生成」刷新」chip。
+- **「卡片库」页面**:侧边栏新增「卡片库」入口(`/cards`,LayoutDashboard 图标)。网格视图,按 Skill 名/标题搜索;每张卡片显示 AI/已评测标识和生成时间;支持预览(iframe + 复制/下载/新标签页)和删除(AlertDialog 确认)。切回页面或浏览器 tab 重新激活时自动刷新列表。
+
+#### 新增 API(`/api/skill-card/*`)
+
+| Method | 路径 | 说明 |
+|---|---|---|
+| POST | `/generate` | 入参 `{ skillPath, includeAI?, persist? }`;`persist` 默认 `true`;出参带 `cardId` + `generatedAt`。**仅此端点限频 15/min**(其他 GET/DELETE 走全局 300/min) |
+| GET | `/list` | 卡片库元数据列表(不返回 HTML/data) |
+| GET | `/by-path?skillPath=` | 按路径查最近一次缓存(给 Dialog 用),无则 `{card:null}` |
+| GET | `/:id` | 完整 payload;非 uuid id 返 404(不抛 500) |
+| GET | `/:id/view` | 直接返回 `text/html` + `Content-Security-Policy: sandbox` 头,新标签页可用 |
+| DELETE | `/:id` | 返回 `{deleted: boolean}` |
+
+#### 安全
+
+- AI 凭据严格走 `getDefaultModelConfig()`,body 不接受 `baseUrl/apiKey/modelName`(沿用 v2.1.1 SSRF 防御模型)
+- `id` 在 service 层用 uuid v4 正则严格校验,杜绝路径穿越
+- `skillPath` 在 `PATH_FIELDS` 内,pathGuard 自动覆盖
+- HTML 所有字段过 `escapeHtml`,iframe `sandbox=""` 最严格沙箱,view 路由附加 CSP `sandbox` 头——三重防御
+- `skillPath` 写入/查找时规范化反斜杠,Windows 路径不会因分隔符差异错过缓存
+
+#### 文件清单
+
+- 后端:`server/services/{skillCardService,skillCardTemplate,cardStorageService}.ts`、`server/routes/skill-card.ts`
+- 前端:`src/components/skills/SkillCardDialog.tsx`、`src/pages/SkillCardsPage.tsx`、`src/api/client.ts` 新增 `skillCardApi`、`Sidebar.tsx` 加「卡片库」入口
+- 测试:`server/services/{skillCardService,cardStorageService}.test.ts`、`server/__regression__/{skill-card,skill-card-storage}.integration.test.ts`
 
 ### Tests
 
-- 测试数 87 → **125**(15 test files),`npm test --no-file-parallelism` 全绿。注:`safeUnzip.test.ts` 的「single entry exceeds limit」测试在 vitest worker 并发模式下存在 pre-existing 的 timing race(v2.1.1 引入,与本次改动无关),用 `--no-file-parallelism` 稳定通过。
+- 测试数 87 → **139**(16 test files),`npm test --no-file-parallelism` 全绿。
+- 注:`safeUnzip.test.ts` 的「single entry exceeds limit」测试在 vitest worker 并发模式下存在 pre-existing 的 timing race(v2.1.1 引入,与本次改动无关),`--no-file-parallelism` 稳定通过。详见 [CLAUDE.md](CLAUDE.md) §Tech debt。
 
 ---
 
