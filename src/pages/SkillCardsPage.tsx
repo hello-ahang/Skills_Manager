@@ -291,6 +291,8 @@ export default function SkillCardsPage() {
             {preview && (
               <iframe
                 title="卡片预览"
+                // sandbox="" (empty) = most restrictive: no scripts,
+                // no same-origin, no top-nav. Matches SkillCardDialog.
                 srcDoc={preview.html}
                 sandbox=""
                 className="w-full h-full border-0 bg-white"

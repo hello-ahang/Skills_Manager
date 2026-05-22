@@ -224,6 +224,10 @@ export default function SkillCardDialog({ open, onOpenChange, skillPath, skillNa
             <iframe
               title="Skill 卡片预览"
               srcDoc={html}
+              // sandbox="" (empty string) applies the most restrictive
+              // sandbox: no scripts, no same-origin, no forms, no top
+              // navigation. This isolates any HTML the AI may have
+              // produced from the host app.
               sandbox=""
               className="w-full h-full border-0 bg-white"
               style={{ minHeight: '480px' }}
