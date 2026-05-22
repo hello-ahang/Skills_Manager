@@ -23,6 +23,7 @@ import compareRouter from './routes/compare.js';
 import feedbackRouter from './routes/feedback.js';
 import freshRouter from './routes/fresh.js';
 import backupRouter from './routes/backup.js';
+import skillCardRouter from './routes/skill-card.js';
 import { loadExtensions } from './extensions.js';
 import { authMiddleware, ensureToken } from './middleware/auth.js';
 import { pathGuard } from './middleware/pathGuard.js';
@@ -88,6 +89,7 @@ app.use('/api', pathGuard());
 app.use('/api', rateLimit({ max: 300, windowMs: 60_000 }));
 app.use('/api/fresh', rateLimit({ max: 10, windowMs: 60_000, message: 'Freshness checks are rate-limited; try again shortly.' }));
 app.use('/api/backup', rateLimit({ max: 5, windowMs: 60_000, message: 'Backup operations are rate-limited.' }));
+app.use('/api/skill-card', rateLimit({ max: 15, windowMs: 60_000, message: 'Skill card generation is rate-limited; try again shortly.' }));
 
 // API Routes
 app.use('/api/config', configRouter);
@@ -109,6 +111,7 @@ app.use('/api/compare', compareRouter);
 app.use('/api/feedback', feedbackRouter);
 app.use('/api/fresh', freshRouter);
 app.use('/api/backup', backupRouter);
+app.use('/api/skill-card', skillCardRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
