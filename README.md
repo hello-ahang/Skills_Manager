@@ -227,13 +227,15 @@ skills-manager/
 │   │   ├── feedbackService.ts # 使用反馈采集服务（SQLite）
 │   │   ├── freshService.ts    # 自动保鲜检测服务（含 SSRF 防御）
 │   │   ├── skillCardService.ts # 可视化卡片服务（SKILL.md → HTML,可选 AI 提炼）
+│   │   ├── skillCardTemplate.ts # 卡片 HTML/CSS/SVG 模板渲染
 │   │   └── cardStorageService.ts # 卡片本地持久化（~/.skills-manager/cards/）
 │   └── utils/
 │       ├── symlink.ts         # 软链接工具函数
 │       ├── validation.ts      # 路径/文件名校验
 │       ├── safeUnzip.ts       # ZipSlip + 解压炸弹防护
 │       ├── logger.ts          # pino 结构化日志
-│       └── json.ts            # 安全 JSON 解析（safeParseJsonRecord）
+│       ├── json.ts            # 安全 JSON 解析 + 原子 JSON 写入（atomicWriteJson）
+│       └── skillMd.ts         # SKILL.md 解析（共享给 rubric / card service）
 │
 ├── src/                       # 前端代码
 │   ├── main.tsx               # React 入口
@@ -261,6 +263,7 @@ skills-manager/
 │   │   │   ├── SkillHealthDialog.tsx  # 健康度弹框（四维雷达图 + Rubric 报告 + Eval Loop）
 │   │   │   ├── SkillComparePanel.tsx  # Skill 对比评测面板
 │   │   │   ├── SkillCardDialog.tsx    # 可视化卡片预览/下载/复制 Dialog
+│   │   │   ├── CardPreview.tsx        # 共享:iframe 沙箱 + 下载/复制/打开新标签页三按钮
 │   │   │   ├── EvalLoopPanel.tsx      # 评测-改进循环面板
 │   │   │   ├── VersionHistoryDialog.tsx # 版本历史弹框
 │   │   │   └── SearchResults.tsx      # 搜索结果组件

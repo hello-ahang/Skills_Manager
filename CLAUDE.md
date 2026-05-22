@@ -13,7 +13,7 @@ Vite + React 18 前端 / Express + tsx 后端 / better-sqlite3 + JSON 混合存�
 ```bash
 sm                    # 启动（npm run dev 等价）
 sm-stop               # 停止 + 清端口
-npm test              # vitest 全跑（87 tests, 12 files）
+npm test              # vitest 全跑（139 tests, 16 files；并发模式 safeUnzip 有 race，CI 用 `npm test -- --no-file-parallelism`）
 npm run build         # 生产构建
 
 npx tsc -p tsconfig.server.json --noEmit   # 后端类型检查
@@ -32,7 +32,7 @@ server/db/sqlite.ts             # better-sqlite3 单例 + ensureSchema + JSONL �
 server/services/configService.ts   # getConfig() / getDefaultModelConfig()
 server/utils/safeUnzip.ts       # ZipSlip + 炸弹防护
 src/api/client.ts               # 前端 API 封装（compareApi / lifecycleApi / skillRubricApi 等）
-~/.skills-manager/              # 用户数据：security.json / db.sqlite / user-config.json / extensions/ / rubric-templates/
+~/.skills-manager/              # 用户数据：security.json / db.sqlite / user-config.json / extensions/ / rubric-templates/ / cards/
 ```
 
 ## 红线（违反 = 安全/正确性事故）
